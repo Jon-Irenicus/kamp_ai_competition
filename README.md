@@ -1,0 +1,1 @@
+# kamp_ai_competition
