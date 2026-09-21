@@ -1,7 +1,7 @@
 import pandas as pd
 from pathlib import Path
 
-PATH = Path(r'C:\Users\82105\kamp_ai_competition\dataset')
+PATH = Path(r'.\dataset')
 
 scaled_data = pd.read_csv(PATH / 'scaled_data.csv', encoding='cp949')
 raw_data = pd.read_excel(PATH / 'Welding Data Set_01.xlsx', sheet_name=0)
