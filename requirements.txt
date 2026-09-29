@@ -4,3 +4,4 @@ scikit-learn==1.9.1
 torch==2.14.0
 ipykernel==7.3.0
 matplotlib==3.11.2
+seaborn==0.13.2
