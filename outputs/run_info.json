@@ -7,7 +7,7 @@
   "seed": 42,
   "data": "dataset\\okm_augumented_2021.csv",
   "selected_model": "gbm",
-  "runtime_sec": 72.6,
+  "runtime_sec": 71.0,
   "config": {
     "COPY_POLICY": "keep",
     "COST_ONLY_COLS": [
@@ -59,7 +59,7 @@
       "45분",
       "60분"
     ],
-    "PRODUCTION_PLAN": "daily",
+    "PRODUCTION_PLAN": "hourly",
     "PURGE_DUPLICATE_GROUPS": true,
     "RF_PARAMS": {
       "n_estimators": 300,

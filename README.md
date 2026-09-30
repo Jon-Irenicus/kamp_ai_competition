@@ -11,6 +11,16 @@ python run.py              # 전체 실행
 python run.py --fast       # ablation·누수 시연 생략(반복 실험용)
 ```
 
+분석 노트북은 `run.py` 실행 후에 연다.
+
+```bash
+pip install jupyter                      # 선택: shap도 설치하면 02 노트북에 SHAP 그림이 추가됨
+jupyter notebook notebooks/
+# 명령줄에서 실행 결과까지 저장하려면
+jupyter nbconvert --to notebook --execute notebooks/01_data_diagnosis.ipynb --output-dir outputs/notebooks
+jupyter nbconvert --to notebook --execute notebooks/02_results_analysis.ipynb --output-dir outputs/notebooks
+```
+
 CPU 1코어 기준 전체 약 6~7분, `--fast` 약 4분. LightGBM을 설치하면 자동으로 GBM 백엔드로 쓰이고 더 빨라진다.
 정제는 전부 코드로 수행하며 원본 파일은 수정하지 않는다.
 
@@ -25,7 +35,15 @@ src/models.py          나이브, 프로파일 평균, 랜덤포레스트, GBM, 
 src/metrics.py         회귀 지표, 일 최대수요 지표, 피크 이벤트 F1·FN·FP
 src/experiment.py      walk-forward CV, 최종 테스트, ablation, 누수 시연, 오류 슬라이스
 src/report.py          results.md, CSV, 그림
+src/viz.py             노트북 공용 그림 설정(한글 폰트 자동 탐색, 히트맵)
+notebooks/
+  01_data_diagnosis.ipynb    평가항목 1: 정제 근거, 변수 의미 검증, 복제일, 전력 패턴
+  02_results_analysis.ipynb  평가항목 2·3·4: 모델 비교, 오류분석, 영향변수·상호작용, 피크 위험 캘린더
 ```
+
+노트북 규칙: (1) 로직은 `src/`에서 불러오기만 하고 노트북에서 새로 만들지 않는다. 좋은 아이디어는 `src/`로 옮겨 `run.py`에 연결한다.
+(2) 수정 후 항상 "커널 재시작 → 전체 실행"이 통과해야 한다. (3) 첫 셀의 `%autoreload 2`로 `src/` 수정이 바로 반영된다.
+02 노트북은 최종 모델을 다시 학습해 `run.py`의 예측과 일치하는지 확인한다(재현성 점검).
 
 ## 변수 해석 (해석 A)
 
