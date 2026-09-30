@@ -1,0 +1,68 @@
+{
+  "n_rows_raw": 6168,
+  "hour_repaired": {
+    "rows": 48,
+    "dates": [
+      "20210713",
+      "20210715"
+    ]
+  },
+  "period": [
+    "2021-01-01 00:00:00",
+    "2021-09-14 23:00:00"
+  ],
+  "n_days": 257,
+  "missing_hours_after_repair": 0,
+  "duplicate_ts_after_repair": 0,
+  "day_col_is_weekday_mon1_sun7": true,
+  "avg_col_vs_mean_of_4_max_abs_diff": 0.5,
+  "labor_rule_holds_on_unrepaired_rows": true,
+  "labor_mult_recomputed_rows": 18,
+  "tariff_constant_within_month": true,
+  "tariff_by_month": {
+    "1": 109.8,
+    "2": 109.8,
+    "3": 167.2,
+    "4": 167.2,
+    "5": 167.2,
+    "6": 191.6,
+    "7": 191.6,
+    "8": 191.6,
+    "9": 167.2
+  },
+  "leakage_factory_staff": {
+    "max_abs_diff_vs_prod_over_power_sum": 4.944070042256499e-09,
+    "nan_rows_all_0_div_0": 17,
+    "action": "excluded (target leakage)"
+  },
+  "weather_missing_before": {
+    "기온": 0,
+    "습도": 0,
+    "풍속": 3,
+    "강수량": 1
+  },
+  "zero_power_hours": {
+    "n": 17,
+    "dates": [
+      "2021-08-28",
+      "2021-08-29"
+    ]
+  },
+  "duplicate_days": {
+    "n_days": 257,
+    "n_unique_profiles": 142,
+    "n_days_in_duplicate_groups": 160,
+    "n_copy_days_excluding_first": 115,
+    "days_in_duplicate_groups_by_month": {
+      "1": 27,
+      "2": 28,
+      "3": 28,
+      "4": 30,
+      "5": 17,
+      "6": 28,
+      "7": 2,
+      "8": 0,
+      "9": 0
+    }
+  }
+}

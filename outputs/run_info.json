@@ -1,0 +1,81 @@
+{
+  "python": "3.14.0",
+  "numpy": "2.5.3",
+  "pandas": "3.0.6",
+  "scikit-learn": "1.9.1",
+  "gbm_backend": "lightgbm 4.7.0",
+  "seed": 42,
+  "data": "dataset\\okm_augumented_2021.csv",
+  "selected_model": "gbm",
+  "runtime_sec": 72.6,
+  "config": {
+    "COPY_POLICY": "keep",
+    "COST_ONLY_COLS": [
+      "인건비",
+      "전기요금(계절)"
+    ],
+    "CV_FOLD_DAYS": 7,
+    "CV_SCORE_ORIGINAL_ONLY": true,
+    "CV_START": "2021-07-05",
+    "DATA_PATH": "dataset\\okm_augumented_2021.csv",
+    "ENCODING": "utf-8-sig",
+    "HGB_PARAMS": {
+      "max_iter": 800,
+      "learning_rate": 0.03,
+      "max_leaf_nodes": 31,
+      "min_samples_leaf": 20,
+      "l2_regularization": 1.0,
+      "early_stopping": false
+    },
+    "HOLIDAYS": [
+      "2021-01-01",
+      "2021-02-11",
+      "2021-02-12",
+      "2021-02-13",
+      "2021-03-01",
+      "2021-05-05",
+      "2021-05-19",
+      "2021-08-16"
+    ],
+    "LEAKAGE_COLS": [
+      "공장인원"
+    ],
+    "LGB_PARAMS": {
+      "n_estimators": 800,
+      "learning_rate": 0.03,
+      "num_leaves": 31,
+      "min_child_samples": 20,
+      "subsample": 0.8,
+      "subsample_freq": 1,
+      "colsample_bytree": 0.8,
+      "reg_lambda": 1.0
+    },
+    "OUTPUT_DIR": "outputs",
+    "PEAK_QUANTILE": 0.9,
+    "PLANNED_SHUTDOWNS": [],
+    "POWER_COLS": [
+      "15분",
+      "30분",
+      "45분",
+      "60분"
+    ],
+    "PRODUCTION_PLAN": "daily",
+    "PURGE_DUPLICATE_GROUPS": true,
+    "RF_PARAMS": {
+      "n_estimators": 300,
+      "min_samples_leaf": 3,
+      "max_features": 0.5
+    },
+    "RISK_QUANTILE": 0.8,
+    "RUN_LEAKAGE_DEMO": true,
+    "SEED": 42,
+    "TEST_START": "2021-08-23",
+    "USE_WEATHER": true,
+    "WEATHER_COLS": [
+      "기온",
+      "습도",
+      "풍속",
+      "강수량"
+    ]
+  }
+}
