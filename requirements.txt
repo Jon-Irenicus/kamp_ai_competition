@@ -1,11 +1,7 @@
-# 검증한 환경: Python 3.12.3
 pandas==3.0.6
 numpy==2.5.3
 scikit-learn==1.9.1
 torch==2.14.0
 ipykernel==7.3.0
 matplotlib==3.11.2
-
-# 선택: 설치돼 있으면 GBM 백엔드로 자동 사용된다(run_info.json에 기록).
-# 설치했다면 버전을 고정해서 적어둘 것. 예) lightgbm==<설치한 버전>
-# lightgbm
+lightgbm==4.7.0
