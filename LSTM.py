@@ -7,8 +7,18 @@ class Seq2SeqLSTM(nn.Module):
         
         self.output_size = output_size
         
-        self.encoder_lstm = nn.LSTM(input_size, hidden_size, num_layers, dropout, batch_first=True)
-        self.decoder_lstm = nn.LSTM(1, hidden_size, num_layers, dropout, batch_first=True)
+        self.encoder_lstm = nn.LSTM(
+            input_size=input_size, 
+            hidden_size=hidden_size, 
+            num_layers=num_layers, 
+            dropout=dropout, 
+            batch_first=True)
+        self.decoder_lstm = nn.LSTM(
+            input_size=1, 
+            hidden_size=hidden_size, 
+            num_layers=num_layers, 
+            dropout=dropout, 
+            batch_first=True)
         self.fc = nn.Linear(hidden_size, 1)
         
     def forward(self, x):
