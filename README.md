@@ -15,8 +15,12 @@ pip install -r requirements.txt
 ```
 
 그 다음 `baseline_preprocessing.ipynb`를 처음부터 끝까지 실행하면 원본 데이터를 전처리하고
-`dataset/data_final.csv`로 저장한다. 전처리가 끝나면 `baseline_LSTM_prediction.ipynb`를 처음부터 끝까지 실행한다.
-이 노트북은 `baseline_LSTM.py`의 LSTM 모델과 `dataset/data_final.csv`를 불러와 예측을 수행하고 결과를 분석한다.
+`dataset/data_final.csv`로 저장한다. 
+
+전처리가 끝나면 `baseline_LSTM_prediction.ipynb`를 처음부터 끝까지 실행한다.
+
+이 노트북은 `baseline_LSTM.py`의 LSTM 모델과 `dataset/data_final.csv`를 불러와 예측을 수행하고 결과를 분석한 후 모델의 가중치를 저장한다.
+
 따라서 Baseline은 별도의 실행 명령 없이 두 노트북을 순서대로 실행하면 된다.
 
 ### 본 모델 실행
@@ -104,4 +108,4 @@ python tune.py --trials 2 --seed-check 0 --max-trees 300   # 동작 확인용
 ## 평가지표
 
 - 회귀: MAE, RMSE, NMAE, 정전 제외 MAE, 시간 단위 MAE(= kWh 오차), 일 최대수요 오차, 피크 발생 시각 적중률(±1시간)
-- 피크 이벤트: "15분 수요 ≥ 학습기간 90분위"를 이벤트로 정의하고 Precision, Recall, F1, FN(놓친 피크), FP(헛경보)를 계산한다.
+- 피크 이벤트: 각 일자당 모델이 예측한 상위 10개 피크와 실제 상위 10개 피크를 비교
