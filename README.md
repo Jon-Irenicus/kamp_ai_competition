@@ -1,9 +1,29 @@
-# 15분 수요전력 day-ahead 예측
+# KAMP 자원 최적화: 15분 수요전력 day-ahead 예측 파이프라인
 
-원본 CSV에서 정제, 15분 단위 피처, 교차검증, 최종 테스트, 결과물 생성까지 명령 하나로 실행한다.
+제조 공정 상에서 발생하는 15분 간격의 최대수요전력과 생산량 등의 데이터를 이용하여 최대수요전력을 예측하는 모델을 제작한다. 
+본 코드는 baseline 코드와 실제 모델 제작 및 분석 파트로 구분된다. 
 
 ## 실행
 
+### Baseline LSTM 실행
+
+Baseline은 `baseline_LSTM.py`, `baseline_preprocessing.ipynb`, `baseline_LSTM_prediction.ipynb`로 구성된다.
+Baseline을 실행하기 전에 아래 명령으로 필요한 패키지를 설치한다.
+
+```bash
+pip install -r requirements.txt
+```
+
+그 다음 `baseline_preprocessing.ipynb`를 처음부터 끝까지 실행하면 원본 데이터를 전처리하고
+`dataset/data_final.csv`로 저장한다. 
+
+전처리가 끝나면 `baseline_LSTM_prediction.ipynb`를 처음부터 끝까지 실행한다.
+
+이 노트북은 `baseline_LSTM.py`의 LSTM 모델과 `dataset/data_final.csv`를 불러와 예측을 수행하고 결과를 분석한 후 모델의 가중치를 저장한다.
+
+따라서 Baseline은 별도의 실행 명령 없이 두 노트북을 순서대로 실행하면 된다.
+
+### 본 모델 실행
 ```bash
 pip install -r requirements.txt
 # data/okm_augumented_2021.csv 위치에 원본을 둔다(경로는 --data로 변경 가능)
@@ -20,9 +40,6 @@ jupyter notebook notebooks/
 jupyter nbconvert --to notebook --execute notebooks/01_data_diagnosis.ipynb --output-dir outputs/notebooks
 jupyter nbconvert --to notebook --execute notebooks/02_results_analysis.ipynb --output-dir outputs/notebooks
 ```
-
-CPU 1코어 기준 전체 약 6~7분, `--fast` 약 4분. LightGBM을 설치하면 자동으로 GBM 백엔드로 쓰이고 더 빨라진다.
-정제는 전부 코드로 수행하며 원본 파일은 수정하지 않는다.
 
 ## 구조
 
@@ -44,7 +61,26 @@ src/viz.py             노트북 공용 그림 설정(한글 폰트 자동 탐�
 notebooks/
   01_data_diagnosis.ipynb    평가항목 1: 정제 근거, 변수 의미 검증, 복제일, 전력 패턴
   02_results_analysis.ipynb  평가항목 2·3·4: 모델 비교, 오류분석, 영향변수·상호작용, 피크 위험 캘린더
+
+baseline_LSTM.py       Baseline LSTM 모델 구현
+baseline_preprocessing.ipynb
+                       Baseline 실행 전 원본 데이터 전처리 및 dataset/data_final.csv 생성
+baseline_LSTM_prediction.ipynb
+                       Baseline LSTM 모델과 전처리 결과를 불러와 예측 및 결과 분석
+baseline_lstm.pth      Baseline 코드 실행 후 저장한 모델의 가중치
+
 ```
+
+위 구조에서 `baseline_`이 붙은 파일들은 LSTM을 이용한 Baseline 분석을 위한 파일이다.
+반면 `src/`, `run.py`, `tune.py`, `notebooks/`, `outputs/`는 실제 분석 파이프라인을 구성하며,
+데이터 전처리부터 여러 예측 모델의 비교·검증·오류 분석과 결과물 저장까지 수행한다.
+
+즉, Baseline은 LSTM 단일 모델의 예측 결과를 확인하는 별도 구성이고,
+나머지 파일들은 나이브 모델, 랜덤포레스트, GBM, 분위수 GBM 등 여러 모델을 비교 분석하는 구조이다.
+
+노트북 규칙: (1) 로직은 `src/`에서 불러오기만 하고 노트북에서 새로 만들지 않는다. 좋은 아이디어는 `src/`로 옮겨 `run.py`에 연결한다.
+(2) 수정 후 항상 "커널 재시작 → 전체 실행"이 통과해야 한다. (3) 첫 셀의 `%autoreload 2`로 `src/` 수정이 바로 반영된다.
+02 노트북은 최종 모델을 다시 학습해 `run.py`의 예측과 일치하는지 확인한다(재현성 점검).
 
 ## 정제 규칙
 
@@ -103,6 +139,5 @@ python tune.py --trials 2 --seed-check 0 --max-trees 300   # 동작 확인용
 ## 평가지표
 
 - 회귀: MAE, RMSE, NMAE, 정전 제외 MAE, 시간 단위 MAE(= kWh 오차), 일 최대수요 오차, 피크 발생 시각 적중률(±1시간)
-- 피크 이벤트: "15분 수요 ≥ 학습기간 90분위"를 이벤트로 정의하고 Precision, Recall, F1, FN(놓친 피크), FP(헛경보)를 계산한다.
-  대회 평가표의 F1·FN·FP 요구를 회귀 과제에 맞게 옮긴 것이다.
+- 피크 이벤트: 각 일자당 모델이 예측한 상위 10개 피크와 실제 상위 10개 피크를 비교
 
