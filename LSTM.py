@@ -42,4 +42,4 @@ class Seq2SeqLSTM(nn.Module):
         out, _ = self.decoder_lstm(future, (hidden, cell))   
         out = torch.cat([out, future], dim=-1)           
 
-        return self.head(out).squeeze(-1)               
+        return self.head(out).squeeze(-1)                

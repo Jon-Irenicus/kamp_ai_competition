@@ -10,3 +10,4 @@ optuna==5.0.0
 pandas==3.0.6
 scikit-learn==1.9.1
 shap==0.52.0
+seaborn==0.13.2
