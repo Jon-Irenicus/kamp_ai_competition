@@ -1,8 +1,8 @@
-"""첨부된 Seq2Seq LSTM 구조(LSTM.py)를 그대로 옮긴 것. 학습·데이터 처리는 src/seq.py에서 한다.
+"""Seq2Seq LSTM.
 
-- encoder: 과거 window칸의 [전력 + 달력] 시퀀스를 읽어 (hidden, cell) 상태로 요약
-- decoder: 그 상태에서 시작해, 예측일 96칸의 "미리 아는 정보" 시퀀스를 읽음
-- head: 디코더 출력과 미래 정보를 이어 붙여 칸마다 전력 1개를 출력
+encoder: 과거 구간의 [전력 + 달력] 시퀀스를 (hidden, cell) 상태로 요약
+decoder: 인코더 상태에서 시작해 예측 구간의 사전 정보 시퀀스를 처리
+head: 디코더 출력과 사전 정보를 결합해 구간별 전력을 출력
 """
 import torch
 import torch.nn as nn

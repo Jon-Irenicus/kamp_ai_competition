@@ -1,15 +1,13 @@
 #!/usr/bin/env python
-"""GBM 하이퍼파라미터 탐색. 주간 walk-forward CV(run.py와 같은 폴드·채점 기준)만 사용하고 테스트는 보지 않는다.
+"""GBM 하이퍼파라미터 탐색.
 
-사용법:
-    python tune.py                       # 기본 60회 탐색
-    python tune.py --trials 100 --timeout 3600
-    python tune.py --trials 2 --seed-check 0 --max-trees 300   # 동작 확인용
+run.py와 같은 주간 walk-forward 폴드·채점 기준(채점일 가중 MAE)을 사용하며 테스트 구간은 사용하지 않는다.
+  - Optuna가 있으면 TPE + MedianPruner, 없으면 동일 탐색 공간의 랜덤 탐색
+  - 트리 개수는 최대 개수로 한 번 학습한 뒤 체크포인트별 예측으로 폴드 공통 최적값을 선택
+  - 추천: 1-표준오차 규칙(폴드별 짝지은 차이 기준), 기준 설정보다 나은 후보 중 가장 단순한 것
+결과: outputs/tuning_trials.csv, outputs/tuning_summary.md (config.py 반영은 수동)
 
-- Optuna가 설치돼 있으면 TPE 탐색과 가지치기(pruning)를 쓰고, 없으면 같은 탐색 공간에서 랜덤 탐색을 한다.
-- 트리 개수는 탐색하지 않고, 한 번 넉넉히 학습한 뒤 체크포인트별 예측으로 7개 폴드 공통 최적값을 고른다.
-- 결과: outputs/tuning_trials.csv(모든 시도), outputs/tuning_summary.md(추천값과 config.py에 붙일 코드).
-  추천값은 자동 반영하지 않는다. config.py에 옮긴 뒤 run.py를 다시 실행한다.
+    python tune.py [--trials 60] [--timeout SEC] [--seed-check 3] [--max-trees 2000]
 """
 from __future__ import annotations
 
@@ -38,7 +36,7 @@ TUNE_LR = 0.05
 MAX_TREES = 2000
 CHECKPOINTS = [100, 200, 300, 500, 700, 1000, 1500, 2000]
 
-# (이름, 하한, 상한, 로그척도, 정수) — 백엔드별 탐색 공간
+# (이름, 하한, 상한, 로그 척도, 정수)
 SPACE_LGB = [
     ("num_leaves", 15, 127, True, True),
     ("min_child_samples", 20, 300, True, True),
@@ -58,11 +56,11 @@ COMPLEXITY_KEY = "num_leaves" if _HAS_LGB else "max_leaf_nodes"
 MIN_LEAF_KEY = "min_child_samples" if _HAS_LGB else "min_samples_leaf"
 
 
-LIB_DEFAULTS = {"min_split_gain": 0.0, "max_features": 1.0}   # config에 없으면 라이브러리 기본값
+LIB_DEFAULTS = {"min_split_gain": 0.0, "max_features": 1.0}
 
 
 def baseline_params() -> dict:
-    """현재 config.py 설정을 탐색 공간의 키로 옮긴 것(비교 기준, 0번 시도)."""
+    """현재 config 설정(0번 시도, 비교 기준)."""
     src = C.LGB_PARAMS if _HAS_LGB else C.HGB_PARAMS
     return {name: src.get(name, LIB_DEFAULTS.get(name)) for name, *_ in SPACE}
 
@@ -79,7 +77,7 @@ def make_model(params: dict, seed: int):
 
 
 def checkpoint_predictions(model, X) -> np.ndarray:
-    """(체크포인트 수, 행 수) 예측 행렬. 한 번 학습한 모델에서 앞의 k개 트리만 쓴 예측을 꺼낸다."""
+    """(체크포인트 수, 행 수) 예측 행렬. 앞의 k개 트리만 사용한 예측."""
     if _HAS_LGB:
         return np.vstack([model.predict(X, num_iteration=k) for k in CHECKPOINTS])
     out, want = [], set(CHECKPOINTS)
@@ -90,7 +88,7 @@ def checkpoint_predictions(model, X) -> np.ndarray:
 
 
 def evaluate(params: dict, folds, cols, seed: int = C.SEED, report=None) -> dict:
-    """폴드별·체크포인트별 MAE를 계산하고, 폴드 공통 최적 체크포인트를 고른다."""
+    """폴드별·체크포인트별 MAE와 폴드 공통 최적 체크포인트."""
     maes, weights = [], []
     for i, (_, tr, val, score, _) in enumerate(folds):
         tr = _train_rows(tr, C.COPY_POLICY)
@@ -170,8 +168,7 @@ def run_search(folds, cols, n_trials: int, timeout: float | None, seed: int) -> 
 
 
 def recommend(trials: pd.DataFrame, base_mae: float) -> tuple[pd.Series, pd.Series]:
-    """1-표준오차 규칙: 최고 점수와 '통계적으로 구분되지 않는' 후보 중 가장 단순한(잎 적고, 잎 최소샘플 큰) 것.
-    모든 후보가 같은 폴드로 평가되므로 폴드 난이도 차이를 빼기 위해 폴드별 '짝지은 차이'로 표준오차를 계산한다."""
+    """최고 점수와의 폴드별 짝지은 차이가 1 표준오차 이내이고 기준보다 나은 후보 중 가장 단순한 것."""
     done = trials[trials["state"] == "complete"].copy()
     best = done.loc[done["cv_mae"].idxmin()]
     best_f = np.array(json.loads(best["fold_mae"]))
@@ -181,7 +178,7 @@ def recommend(trials: pd.DataFrame, base_mae: float) -> tuple[pd.Series, pd.Seri
         se = diff.std(ddof=1) / math.sqrt(len(diff)) if len(diff) > 1 else 0.0
         return (row["cv_mae"] - best["cv_mae"]) <= se
 
-    near = done[done.apply(within_se, axis=1) & (done["cv_mae"] < base_mae)]   # 기준보다 나은 후보만
+    near = done[done.apply(within_se, axis=1) & (done["cv_mae"] < base_mae)]
     if near.empty:
         return best, best
     pick = near.sort_values([COMPLEXITY_KEY, MIN_LEAF_KEY], ascending=[True, False]).iloc[0]
@@ -194,9 +191,9 @@ def main():
     ap.add_argument("--data", type=Path, default=C.DATA_PATH)
     ap.add_argument("--out", type=Path, default=C.OUTPUT_DIR)
     ap.add_argument("--trials", type=int, default=60)
-    ap.add_argument("--timeout", type=float, default=None, help="초 단위 전체 제한 시간")
-    ap.add_argument("--seed-check", type=int, default=3, help="추천값을 다른 시드 몇 개로 재확인할지(0이면 생략)")
-    ap.add_argument("--max-trees", type=int, default=MAX_TREES, help="탐색 시 최대 트리 수(빠른 확인용으로 줄일 수 있음)")
+    ap.add_argument("--timeout", type=float, default=None, help="전체 제한 시간(초)")
+    ap.add_argument("--seed-check", type=int, default=3, help="추천 설정의 시드 재평가 횟수(0: 생략)")
+    ap.add_argument("--max-trees", type=int, default=MAX_TREES, help="탐색 시 최대 트리 수")
     args = ap.parse_args()
     MAX_TREES = args.max_trees
     CHECKPOINTS = sorted({k for k in CHECKPOINTS if k < MAX_TREES} | {MAX_TREES})
@@ -233,8 +230,8 @@ def main():
         reasons.append(f"기준보다 나은 폴드가 과반이 아님({wins}/{len(pick_f)})")
     if gain > 0 and gain <= seed_std:
         reasons.append("개선 폭이 시드 간 표준편차 이하")
-    verdict = ("**채택 권장**: 아래 코드를 config.py에 반영하고 run.py를 다시 실행하세요." if adopt
-               else "**채택 비권장**: " + ", ".join(reasons) + ". 현재 config를 유지하거나 탐색 횟수를 늘리세요.")
+    verdict = ("**채택**: 아래 설정을 config.py에 반영 후 run.py 재실행" if adopt
+               else "**미채택**: " + ", ".join(reasons) + " → 현재 설정 유지")
 
     name = "LGB_PARAMS" if _HAS_LGB else "HGB_PARAMS"
     fixed = (dict(n_estimators=int(pick["n_estimators"]), learning_rate=TUNE_LR, subsample_freq=1) if _HAS_LGB
@@ -242,7 +239,7 @@ def main():
     snippet = f"{name} = dict(\n" + "".join(f"    {k}={v!r},\n" for k, v in {**fixed, **params}.items()) + ")"
 
     lines = [
-        "# 하이퍼파라미터 탐색 결과 (자동 생성)", "",
+        "# 하이퍼파라미터 탐색 결과", "",
         f"- 백엔드: {gbm_backend()}, 탐색기: {'Optuna TPE' if _HAS_OPTUNA else '랜덤 탐색'}, "
         f"완료 {int((trials['state'] == 'complete').sum())}회 / 가지치기 {int((trials['state'] == 'pruned').sum())}회",
         f"- 기준(현재 config, 0번 시도): CV MAE {base['cv_mae']:.3f} (트리 {int(base['n_estimators'])}개, learning_rate {TUNE_LR})",
@@ -252,8 +249,8 @@ def main():
         + f", 기준보다 나은 폴드 {wins}/{len(pick_f)}개",
         seed_line, "",
         verdict, "",
-        "채택 조건: 기준보다 CV MAE가 낮고, 과반의 폴드에서 낫고, 개선 폭이 시드 간 표준편차보다 클 것.", "",
-        "추천 후보를 `src/config.py`에 붙일 코드 (채택 권장일 때만 반영):", "", "```python", snippet, "```", "",
+        "채택 조건: CV MAE 개선, 과반 폴드에서 우세, 개선 폭 > 시드 간 표준편차", "",
+        "추천 후보 설정:", "", "```python", snippet, "```", "",
         "폴드별 MAE (기준 → 추천): " + ", ".join(f"{a:.2f}→{b:.2f}" for a, b in zip(base_f, pick_f)),
     ]
     (args.out / "tuning_summary.md").write_text("\n".join(l for l in lines if l is not None), encoding="utf-8")

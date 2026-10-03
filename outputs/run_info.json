@@ -3,13 +3,13 @@
   "numpy": "2.4.4",
   "pandas": "3.0.2",
   "scikit-learn": "1.8.0",
-  "gbm_backend": "sklearn HistGradientBoosting (lightgbm 미설치)",
-  "seed": 42,
+  "gbm_backend": "sklearn HistGradientBoosting",
   "torch": null,
   "lstm_run": false,
+  "seed": 42,
   "data": "data/okm_augumented_2021.csv",
   "selected_model": "gbm_1d",
-  "runtime_sec": 271.4,
+  "runtime_sec": 236.9,
   "config": {
     "COPY_POLICY": "keep",
     "COST_ONLY_COLS": [
@@ -39,8 +39,6 @@
       "2021-05-19",
       "2021-08-16"
     ],
-    "LAG_IMPUTE_OUTAGE": true,
-    "LAG_IMPUTE_WEEKS": 4,
     "LEAKAGE_COLS": [
       "공장인원"
     ],
@@ -86,7 +84,7 @@
       "stride": 4
     },
     "OUTPUT_DIR": "outputs",
-    "PEAK_QUANTILE": 0.9,
+    "PEAK_TOP_K": 10,
     "PLANNED_SHUTDOWNS": [],
     "POWER_COLS": [
       "15분",

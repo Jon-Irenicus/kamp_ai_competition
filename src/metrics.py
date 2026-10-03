@@ -1,13 +1,22 @@
 """평가지표.
 
-회귀 지표 외에, 대회 평가표의 F1·FN·FP 요구를 채우기 위해
-"15분 수요전력 >= 임계값"을 피크 이벤트로 정의한 분류 지표를 함께 계산한다.
-임계값은 항상 해당 분할의 학습 구간에서만 정한다.
+전체 오차: MAE, RMSE, NMAE, bias
+일 최대수요: daily_max_mae, daily_max_bias
+피크(일자별 상위 K개 15분 구간, K = config.PEAK_TOP_K)
+  - top{K}_hit: 예측 상위 K개 구간 중 실제 상위 K개에 포함된 비율(순위 무관). 일자별로 계산해 평균한다.
+                실제값 동률을 고려해 K번째로 큰 실제값 이상인 구간을 모두 실제 피크로 본다.
+  - top{K}_mae: 실제 상위 K개 값과 예측 상위 K개 값을 각각 내림차순 정렬해 순위끼리 비교한 MAE.
+                발생 시각과 무관하게 피크 수준의 정확도를 본다(시각은 top{K}_hit이 평가).
 """
 from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+
+from . import config as C
+
+K = C.PEAK_TOP_K
+HIT_COL, TOPK_MAE_COL = f"top{K}_hit", f"top{K}_mae"
 
 
 def regression(y, p) -> dict:
@@ -18,37 +27,37 @@ def regression(y, p) -> dict:
             "nmae": mae / float(np.mean(y)), "bias": float(np.mean(e))}
 
 
-def peak_events(y, p, thr: float) -> dict:
-    t = np.asarray(y) >= thr
-    q = np.asarray(p) >= thr
-    tp, fp, fn = int((t & q).sum()), int((~t & q).sum()), int((t & ~q).sum())
-    prec = tp / (tp + fp) if tp + fp else np.nan
-    rec = tp / (tp + fn) if tp + fn else np.nan
-    f1 = 2 * prec * rec / (prec + rec) if tp else 0.0
-    return {"peak_thr": float(thr), "peak_pos": int(t.sum()), "precision": prec,
-            "recall": rec, "f1": f1, "fn": fn, "fp": fp}
+def daily_matrix(d: pd.DataFrame, col: str) -> pd.DataFrame:
+    """(일자 × 96구간) 행렬. 하루 96구간이 모두 있어야 한다."""
+    m = d.pivot(index="date", columns="slot", values=col)
+    if m.shape[1] != 96 or m.isna().any().any():
+        raise ValueError("일자별 96구간이 모두 있어야 합니다.")
+    return m
+
+
+def topk_scores(actual: np.ndarray, pred: np.ndarray, k: int = K) -> tuple[np.ndarray, np.ndarray]:
+    """일자별 상위 k개 적중 수와 상위 k개 MAE. 입력 shape: (일자, 96)."""
+    pred_top = np.argsort(-pred, axis=1, kind="stable")[:, :k]          # 예측 동률은 이른 시각 우선
+    actual_sorted = -np.sort(-actual, axis=1)
+    kth = actual_sorted[:, k - 1]
+    hits = (np.take_along_axis(actual, pred_top, axis=1) >= kth[:, None]).sum(axis=1)
+    pred_sorted = -np.sort(-pred, axis=1)
+    mae = np.abs(actual_sorted[:, :k] - pred_sorted[:, :k]).mean(axis=1)
+    return hits, mae
 
 
 def daily_peak(d: pd.DataFrame) -> dict:
-    """일 최대 15분 수요전력의 크기 오차와 발생 시각 적중률(±1시간)."""
-    g = d.groupby("date")
-    act, pred = g["kw"].max(), g["pred"].max()
-    sa = d.loc[g["kw"].idxmax().to_numpy(), "slot"].to_numpy()
-    sp = d.loc[g["pred"].idxmax().to_numpy(), "slot"].to_numpy()
-    return {"daily_max_mae": float((pred - act).abs().mean()),
-            "daily_max_bias": float((pred - act).mean()),
-            "peak_time_hit_1h": float(np.mean(np.abs(sa - sp) <= 4))}
+    a = daily_matrix(d, "kw").to_numpy()
+    p = daily_matrix(d, "pred").to_numpy()
+    diff = p.max(axis=1) - a.max(axis=1)
+    hits, tmae = topk_scores(a, p)
+    return {"daily_max_mae": float(np.abs(diff).mean()), "daily_max_bias": float(diff.mean()),
+            HIT_COL: float((hits / K).mean()), TOPK_MAE_COL: float(tmae.mean())}
 
 
-def evaluate(te: pd.DataFrame, pred, thr: float) -> dict:
-    d = te[["date", "slot", "ts_hour", "kw", "zero_power"]].copy()
+def evaluate(te: pd.DataFrame, pred) -> dict:
+    d = te[["date", "slot", "kw"]].copy()
     d["pred"] = np.asarray(pred, dtype=float)
     out = regression(d["kw"], d["pred"])
-    ex = ~d["zero_power"]
-    r = regression(d.loc[ex, "kw"], d.loc[ex, "pred"])
-    out.update(mae_excl_outage=r["mae"], nmae_excl_outage=r["nmae"])
-    hourly = d.groupby("ts_hour")[["kw", "pred"]].mean()   # 해석 A: 시간평균 kW = 시간당 kWh
-    out["hourly_mae"] = float((hourly["pred"] - hourly["kw"]).abs().mean())
     out.update(daily_peak(d))
-    out.update(peak_events(d["kw"], d["pred"], thr))
     return out

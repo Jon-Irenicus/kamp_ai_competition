@@ -1,18 +1,18 @@
-"""시퀀스 모델(LSTM) 래퍼.
+"""시퀀스 모델(LSTM) 학습·예측.
 
-첨부 코드의 make_sequences와 같은 구조로 데이터를 자른다.
-  - 과거 입력 X: 예측 시작 직전 window칸의 [전력(정전 대체값) + 그 시점의 달력 정보]
-  - 미래 입력 C: 예측할 96칸의 '미리 아는 정보'(달력 등) + 모델별 디코더 래그(같은 칸의 1일 전·7일 전 전력)
-  - 타깃 y: 예측할 96칸의 실제 전력
-차이점은 세 가지다.
-  1) 전체 배열을 미리 만들지 않고 시작 위치(index)만 저장한 뒤 배치마다 잘라낸다(7일 창도 메모리 부담이 작음).
-  2) 학습 샘플은 stride칸 간격으로 시작하지만, 평가·예측은 항상 00:00 시작(day-ahead 과제와 동일)으로 한다.
-  3) 표준화 기준(평균·표준편차)은 각 폴드의 학습 행에서만 계산한다(누수 방지).
-     디코더 래그는 노트북처럼 타깃과 같은 기준으로 스케일해, 참조값과 맞힐 값이 같은 단위가 되게 한다.
-  4) 조기 종료 모니터(학습 구간 마지막 며칠)와 복제그룹이 같은 학습 샘플은 뺀다(CV의 purge와 같은 규칙).
+샘플 구성
+  - 과거 입력: 예측 시작 직전 window개 구간의 [전력 + 해당 시점의 달력·상태]
+  - 미래 입력: 예측할 96개 구간의 달력·상태 + decoder_lags(같은 구간의 과거 전력)
+  - 타깃: 예측할 96개 구간의 전력
 
-이 파일의 SequenceForecaster는 torch 없이 동작하고(창 자르기·표준화·예측 되돌리기),
-학습 루프만 LSTMForecaster가 torch로 구현한다. tests/test_sequences.py가 창 정렬을 검증한다.
+구현 사항
+  - 시작 위치만 저장하고 배치마다 구간을 잘라낸다.
+  - 학습 샘플은 stride 간격으로 시작하며, 예측은 항상 00:00에서 시작한다.
+  - 표준화 기준은 학습 행으로만 계산한다. decoder_lags는 타깃과 같은 기준으로 스케일한다.
+  - 조기 종료 모니터는 학습 구간 마지막 monitor_days일이며, 모니터와 같은 복제그룹을 타깃으로 하는 학습 샘플은 제외한다.
+
+SequenceForecaster는 torch 없이 동작하는 부분(구간 구성, 스케일링, 예측 배치)이고,
+LSTMForecaster가 torch 학습을 구현한다.
 """
 from __future__ import annotations
 
@@ -28,24 +28,21 @@ try:
 except ImportError:
     HAS_TORCH = False
 
-HORIZON = SLOTS_PER_DAY   # 하루 96칸
+HORIZON = SLOTS_PER_DAY
 
 
 class SequenceForecaster:
-    """창 자르기·표준화·예측 배치를 담당. 학습(_train)과 배치 예측(_predict_batch)은 하위 클래스가 구현."""
-
-    needs_full_frame = True   # 실험 코드가 행 단위 X 대신 연속된 전체 프레임을 넘기도록 알리는 표시
+    needs_full_frame = True
 
     def __init__(self, window: int, name: str = "seq", decoder_lags: list[str] | None = None):
         self.window = window
         self.name = name
         self.decoder_lags = list(decoder_lags or [])
 
-    # ── 데이터 준비 ────────────────────────────────────────────────────
+    # ── 입력 구성 ──────────────────────────────────────────────────────
     def _columns(self):
-        """과거 입력 = 전력(정전 대체) + 그 시점의 달력·상태, 미래 입력 = 예측 칸의 달력·상태 (+ 디코더 래그 별도)."""
         fut = nn_future_columns()
-        return ["kw_lag_src"] + fut, fut
+        return ["kw"] + fut, fut
 
     def _fit_scaler(self, feat: pd.DataFrame, fit_index):
         past_cols, fut_cols = self._columns()
@@ -59,14 +56,14 @@ class SequenceForecaster:
         past_cols, fut_cols = self._columns()
         P = ((feat[past_cols] - self.p_mean_) / self.p_std_).to_numpy(np.float32)
         F = ((feat[fut_cols] - self.f_mean_) / self.f_std_).to_numpy(np.float32)
-        if self.decoder_lags:   # 디코더 래그: 타깃과 같은 기준으로 스케일
+        if self.decoder_lags:
             lags = ((feat[self.decoder_lags] - self.y_mean_) / self.y_std_).to_numpy(np.float32)
             F = np.hstack([F, lags])
         Y = ((feat["kw"] - self.y_mean_) / self.y_std_).to_numpy(np.float32)
         return P, F, Y
 
     def _batch(self, P, F, Y, starts):
-        """시작 위치 배열 → (과거 창, 미래 정보, 타깃). 시작 위치 i의 과거 창은 i-window ~ i-1."""
+        """시작 위치 i → 과거 입력 [i-window, i), 미래 입력·타깃 [i, i+96)."""
         w = np.arange(-self.window, 0)
         h = np.arange(HORIZON)
         X = P[starts[:, None] + w]
@@ -77,10 +74,10 @@ class SequenceForecaster:
     @staticmethod
     def _check_frame(feat: pd.DataFrame):
         if not isinstance(feat.index, pd.RangeIndex) or feat.index.start != 0:
-            raise ValueError("시퀀스 모델에는 build_features가 반환한 연속 프레임(0부터 시작하는 RangeIndex)을 넘겨야 합니다.")
+            raise ValueError("build_features가 반환한 연속 프레임(RangeIndex)이 필요합니다.")
 
     def training_starts(self, feat: pd.DataFrame, fit_index) -> np.ndarray:
-        """타깃 96칸이 모두 '학습 허용 행'이고 과거 창이 프레임 안에 있는 시작 위치(stride 간격)."""
+        """타깃 96구간이 모두 학습 허용 행이고 과거 입력이 프레임 안에 있는 시작 위치(stride 간격)."""
         ok = np.zeros(len(feat), dtype=bool)
         ok[np.asarray(fit_index)] = True
         cs = np.concatenate([[0], np.cumsum(ok)])
@@ -90,9 +87,7 @@ class SequenceForecaster:
         return starts[slot[starts] % C.LSTM_TRAIN["stride"] == 0]
 
     def split_monitor(self, feat: pd.DataFrame, starts: np.ndarray):
-        """학습 구간 마지막 monitor_days일을 조기 종료 모니터로 떼어낸다.
-        학습 샘플은 (1) 타깃이 모니터와 겹치지 않게 자르고, (2) 타깃에 모니터 날짜와 같은 복제그룹이
-        들어 있으면 뺀다. (2)가 없으면 복제본을 외워서 모니터 손실이 낮아지는 쪽으로 조기 종료가 왜곡된다."""
+        """조기 종료 모니터 분리. 학습 샘플은 모니터와 기간이 겹치거나 같은 복제그룹을 포함하면 제외한다."""
         if len(starts) == 0:
             raise ValueError("학습 샘플이 없습니다.")
         ts = feat["ts"].to_numpy()
@@ -106,7 +101,7 @@ class SequenceForecaster:
         self.monitor_purged_ = int(clash.sum())
         return tr[~clash], mon
 
-    # ── 실험 코드가 부르는 인터페이스 ──────────────────────────────────
+    # ── 학습·예측 ──────────────────────────────────────────────────────
     def fit_frame(self, feat: pd.DataFrame, fit_index):
         self._check_frame(feat)
         self._fit_scaler(feat, fit_index)
@@ -116,13 +111,13 @@ class SequenceForecaster:
         return self
 
     def predict_frame(self, feat: pd.DataFrame, target_index) -> np.ndarray:
-        """target_index 행들의 예측을 같은 순서로 반환. 각 날은 00:00에서 시작해 96칸을 한 번에 예측한다."""
+        """target_index 행의 예측값을 같은 순서로 반환한다. 일자별로 00:00부터 96구간을 예측한다."""
         self._check_frame(feat)
         P, F, _ = self._arrays(feat)
         tgt = np.asarray(target_index)
         day_starts = tgt[feat["slot"].to_numpy()[tgt] == 0]
         if (day_starts < self.window).any():
-            raise ValueError("예측일 앞에 과거 창을 채울 데이터가 부족합니다.")
+            raise ValueError("과거 입력 구간이 부족한 예측일이 있습니다.")
         out = np.full(len(feat), np.nan)
         bs = C.LSTM_TRAIN["batch_size"]
         for k in range(0, len(day_starts), bs):
@@ -131,10 +126,9 @@ class SequenceForecaster:
             out[(s[:, None] + np.arange(HORIZON)).ravel()] = self._predict_batch(X, Fu).ravel()
         pred = out[tgt] * self.y_std_ + self.y_mean_
         if np.isnan(pred).any():
-            raise ValueError("하루 96칸이 모두 포함되지 않은 예측 대상이 있습니다(예측은 하루 단위로만 가능).")
+            raise ValueError("예측 대상은 하루 96구간 단위여야 합니다.")
         return pred
 
-    # ── 하위 클래스가 구현 ─────────────────────────────────────────────
     def _train(self, P, F, Y, tr_starts, mon_starts):
         raise NotImplementedError
 
@@ -143,7 +137,7 @@ class SequenceForecaster:
 
 
 class LSTMForecaster(SequenceForecaster):
-    """첨부 Seq2SeqLSTM을 학습한다. 손실(L1)·옵티마이저(AdamW)·스케줄러·조기 종료는 노트북 설정을 따른다."""
+    """Seq2SeqLSTM 학습. L1 손실, AdamW, ReduceLROnPlateau, 모니터 손실 기준 조기 종료."""
 
     def _train(self, P, F, Y, tr_starts, mon_starts):
         from .lstm_model import Seq2SeqLSTM
@@ -184,12 +178,12 @@ class LSTMForecaster(SequenceForecaster):
                 if bad >= cfg["patience"]:
                     break
         if best_state is None:
-            raise RuntimeError(f"[{self.name}] 모니터 손실이 한 번도 계산되지 않았습니다(NaN). 입력 데이터를 확인하세요.")
+            raise RuntimeError(f"[{self.name}] 모니터 손실이 계산되지 않았습니다.")
         self.net_.load_state_dict(best_state)
         self.history_ = history
-        print(f"      [{self.name}] 학습 샘플 {len(tr_starts):,}개(모니터와 같은 복제그룹 {self.monitor_purged_}개 제외), "
-              f"{len(history)} epoch, 최종 lr {opt.param_groups[0]['lr']:.1e}, "
-              f"모니터 MAE {best * self.y_std_:.2f} kW (최적 epoch {int(np.argmin(history)) + 1})", flush=True)
+        print(f"      [{self.name}] samples={len(tr_starts):,} (purged {self.monitor_purged_}), "
+              f"epochs={len(history)}, best_epoch={int(np.argmin(history)) + 1}, "
+              f"lr={opt.param_groups[0]['lr']:.1e}, monitor_mae={best * self.y_std_:.2f} kW", flush=True)
 
     def _monitor_mae(self, P, F, Y, starts) -> float:
         errs = []

@@ -1,19 +1,11 @@
-# 검증한 환경: Python 3.12.3
 numpy==2.4.4
 pandas==3.0.2
 scikit-learn==1.8.0
 matplotlib==3.10.8
 
-# 선택: 설치돼 있으면 GBM 백엔드로 자동 사용된다(run_info.json에 기록).
-# 설치했다면 버전을 고정해서 적어둘 것. 예) lightgbm==<설치한 버전>
-# lightgbm
-
-# 선택: 분석 노트북 실행용 (설치했다면 버전을 고정해서 적어둘 것)
+# 선택
+# lightgbm   # GBM 백엔드(미설치 시 sklearn HistGradientBoosting)
+# torch      # LSTM
+# optuna     # tune.py 탐색기
 # jupyter
 # shap
-
-# 선택: LSTM 비교 모델 (없으면 자동 생략). GPU를 쓰려면 CUDA 버전에 맞는 설치 명령을 pytorch.org에서 확인
-# torch
-
-# 선택: tune.py 탐색기 (없으면 랜덤 탐색으로 동작)
-# optuna
