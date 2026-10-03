@@ -4,7 +4,7 @@ from pathlib import Path
 SEED = 42
 
 # ── 데이터 ─────────────────────────────────────────────────────────────
-DATA_PATH = Path("data/okm_augumented_2021.csv")
+DATA_PATH = Path("dataset/okm_augumented_2021.csv")
 OUTPUT_DIR = Path("outputs")
 ENCODING = "utf-8-sig"
 
