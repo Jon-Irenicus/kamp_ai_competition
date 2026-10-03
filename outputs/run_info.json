@@ -1,13 +1,15 @@
 {
-  "python": "3.14.0",
-  "numpy": "2.5.3",
-  "pandas": "3.0.6",
-  "scikit-learn": "1.9.1",
-  "gbm_backend": "lightgbm 4.7.0",
+  "python": "3.12.3",
+  "numpy": "2.4.4",
+  "pandas": "3.0.2",
+  "scikit-learn": "1.8.0",
+  "gbm_backend": "sklearn HistGradientBoosting (lightgbm 미설치)",
   "seed": 42,
-  "data": "dataset\\okm_augumented_2021.csv",
-  "selected_model": "gbm",
-  "runtime_sec": 89.4,
+  "torch": null,
+  "lstm_run": false,
+  "data": "data/okm_augumented_2021.csv",
+  "selected_model": "gbm_1d",
+  "runtime_sec": 271.4,
   "config": {
     "COPY_POLICY": "keep",
     "COST_ONLY_COLS": [
@@ -17,7 +19,7 @@
     "CV_FOLD_DAYS": 7,
     "CV_SCORE_ORIGINAL_ONLY": true,
     "CV_START": "2021-07-05",
-    "DATA_PATH": "dataset\\okm_augumented_2021.csv",
+    "DATA_PATH": "data/okm_augumented_2021.csv",
     "ENCODING": "utf-8-sig",
     "HGB_PARAMS": {
       "max_iter": 800,
@@ -52,6 +54,37 @@
       "colsample_bytree": 0.8,
       "reg_lambda": 1.0
     },
+    "LSTM_MODELS": {
+      "lstm_1d": {
+        "window": 96,
+        "decoder_lags": [
+          "lag_1d"
+        ]
+      },
+      "lstm_7d": {
+        "window": 672,
+        "decoder_lags": [
+          "lag_1d",
+          "lag_7d"
+        ]
+      }
+    },
+    "LSTM_PARAMS": {
+      "hidden_size": 128,
+      "num_layers": 2,
+      "dropout": 0.2
+    },
+    "LSTM_TRAIN": {
+      "epochs": 150,
+      "batch_size": 64,
+      "lr": 0.0002,
+      "weight_decay": 1e-05,
+      "scheduler_factor": 0.5,
+      "scheduler_patience": 10,
+      "patience": 20,
+      "monitor_days": 7,
+      "stride": 4
+    },
     "OUTPUT_DIR": "outputs",
     "PEAK_QUANTILE": 0.9,
     "PLANNED_SHUTDOWNS": [],
@@ -61,7 +94,7 @@
       "45분",
       "60분"
     ],
-    "PRODUCTION_PLAN": "hourly",
+    "PRODUCTION_PLAN": "none",
     "PURGE_DUPLICATE_GROUPS": true,
     "RF_PARAMS": {
       "n_estimators": 300,
@@ -70,9 +103,12 @@
     },
     "RISK_QUANTILE": 0.8,
     "RUN_LEAKAGE_DEMO": true,
+    "RUN_LSTM": true,
     "SEED": 42,
     "TEST_START": "2021-08-23",
-    "USE_WEATHER": true,
+    "USE_MONTH": false,
+    "USE_PLANNED_SHUTDOWN": false,
+    "USE_WEATHER": false,
     "WEATHER_COLS": [
       "기온",
       "습도",

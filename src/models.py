@@ -23,6 +23,16 @@ def gbm_backend() -> str:
     return f"lightgbm {lgb.__version__}" if _HAS_LGB else "sklearn HistGradientBoosting (lightgbm 미설치)"
 
 
+class Yesterday:
+    """어제 같은 15분 슬롯의 실측값(전날 정보만 쓰는 기준 모델)."""
+
+    def fit(self, X, y, sample_weight=None):
+        return self
+
+    def predict(self, X):
+        return X["lag_1d"].to_numpy(dtype=float)
+
+
 class SeasonalNaive:
     """지난주 같은 요일·같은 15분 슬롯의 실측값."""
 
@@ -65,12 +75,27 @@ def make_gbm(quantile: float | None = None):
     return HistGradientBoostingRegressor(**params, random_state=C.SEED)
 
 
-def make_models() -> dict[str, tuple[str, object]]:
-    """이름 → (종류, 새 인스턴스). 종류: point(점예측) | risk(피크위험용 상위분위 예측)."""
-    return {
-        "naive_lastweek": ("point", SeasonalNaive()),
-        "profile_mean": ("point", ProfileMean()),
-        "random_forest": ("point", RandomForestRegressor(**C.RF_PARAMS, random_state=C.SEED, n_jobs=-1)),
-        "gbm": ("point", make_gbm()),
-        f"gbm_q{int(C.RISK_QUANTILE * 100)}": ("risk", make_gbm(quantile=C.RISK_QUANTILE)),
+def make_models() -> dict[str, tuple[str, object, str]]:
+    """이름 → (종류, 새 인스턴스, 입력 과거 범위).
+    종류: point(점예측) | risk(피크위험용 상위분위 예측). 과거 범위: 1d(전날만) | 7d(지난주까지).
+    시퀀스 모델은 needs_full_frame=True라서 실험 코드가 연속 프레임을 넘긴다."""
+    models = {
+        "naive_yesterday": ("point", Yesterday(), "1d"),
+        "naive_lastweek": ("point", SeasonalNaive(), "7d"),
+        "profile_mean": ("point", ProfileMean(), "7d"),
+        "random_forest": ("point", RandomForestRegressor(**C.RF_PARAMS, random_state=C.SEED, n_jobs=-1), "7d"),
+        "gbm_1d": ("point", make_gbm(), "1d"),
+        "gbm": ("point", make_gbm(), "7d"),
+        f"gbm_q{int(C.RISK_QUANTILE * 100)}": ("risk", make_gbm(quantile=C.RISK_QUANTILE), "7d"),
     }
+    if lstm_available():
+        from .seq import LSTMForecaster
+        for name, cfg in C.LSTM_MODELS.items():
+            models[name] = ("point", LSTMForecaster(cfg["window"], name, cfg["decoder_lags"]),
+                            f"{cfg['window'] // 96}d")
+    return models
+
+
+def lstm_available() -> bool:
+    from .seq import HAS_TORCH
+    return C.RUN_LSTM and HAS_TORCH

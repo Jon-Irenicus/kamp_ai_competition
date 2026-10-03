@@ -38,7 +38,8 @@ def write_results_md(out: Path, dq: dict, groups: pd.DataFrame, cv: pd.DataFrame
                      slices: dict, backend: str):
     from .experiment import wavg
     cv_mean = pd.DataFrame([
-        {"model": m, "kind": g["kind"].iloc[0], **{c: wavg(g, c) for c in REG_COLS + PEAK_COLS},
+        {"model": m, "kind": g["kind"].iloc[0], "lookback": g["lookback"].iloc[0],
+         **{c: wavg(g, c) for c in REG_COLS + PEAK_COLS},
          "mae_std_across_folds": g["mae"].std()}
         for m, g in cv.groupby("model")
     ]).sort_values("mae")
@@ -46,7 +47,8 @@ def write_results_md(out: Path, dq: dict, groups: pd.DataFrame, cv: pd.DataFrame
     L = [
         "# 실험 결과 요약 (자동 생성)", "",
         f"- GBM 백엔드: {backend}",
-        f"- 과제: day-ahead, D일 00:00에 D일 15분 수요전력 96개 예측 (생산계획 가정: {C.PRODUCTION_PLAN}, 기상 사용: {C.USE_WEATHER})",
+        f"- 과제: day-ahead, D일 00:00에 D일 15분 수요전력 96개 예측. 미래 정보 사용: 생산계획 {C.PRODUCTION_PLAN}, "
+        f"기상 {C.USE_WEATHER}, 계획휴무 {C.USE_PLANNED_SHUTDOWN} (모두 끄면 달력·과거 전력만 사용)",
         f"- 모델 선정: {C.CV_START}부터 {C.CV_FOLD_DAYS}일 단위 walk-forward, 점예측 모델 중 CV MAE 최소 → **{selected}**",
         f"- 최종 테스트: {C.TEST_START} ~ 끝 (선정에 미사용), 피크 임계값 {thr:.1f} kW "
         f"(학습기간 15분 수요 {int(100 * C.PEAK_QUANTILE)}분위)", "",
@@ -69,11 +71,14 @@ def write_results_md(out: Path, dq: dict, groups: pd.DataFrame, cv: pd.DataFrame
         "", "상위 복제그룹:", "", md_table(groups.head(8)), "",
         "## 2. 교차검증 (주 단위 walk-forward, 채점일 가중 평균)", "",
         md_table(cv.groupby("fold")[["n_train_days", "n_purged_days", "n_scored_days"]].first().reset_index()), "",
-        md_table(cv_mean[["model", "kind", *REG_COLS, "mae_std_across_folds", *PEAK_COLS]]), "",
+        md_table(cv_mean[["model", "kind", "lookback", *REG_COLS, "mae_std_across_folds", *PEAK_COLS]]), "",
         "지표는 폴드별 값의 채점일 가중평균(fn·fp는 폴드당 평균 건수)이라 precision·recall·f1이 서로 정확히 맞물리지 않을 수 있다.", "",
         "폴드별 MAE:", "", md_table(cv.pivot(index="model", columns="fold", values="mae").reset_index()), "",
         f"## 3. 최종 테스트 ({C.TEST_START} ~, 전부 원본 데이터)", "",
-        md_table(test[["model", "kind", *REG_COLS, *PEAK_COLS]]), "",
+        md_table(test[["model", "kind", "lookback", *REG_COLS, *PEAK_COLS]]), "",
+        "## 3-1. 입력 과거 범위 비교 (전날만 1d vs 지난주까지 7d)", "",
+        "학습 데이터 범위(예측일 이전 전체)는 같고, 예측할 때 입력으로 보는 과거 범위만 다르다.", "",
+        md_table(lookback_table(cv_mean, test)), "",
     ]
     if abl is not None:
         L += ["## 4. Ablation (GBM, CV 채점일 가중 평균)", "", md_table(abl), ""]
@@ -86,6 +91,23 @@ def write_results_md(out: Path, dq: dict, groups: pd.DataFrame, cv: pd.DataFrame
     for k, v in slices.items():
         L += [f"### {k}", "", md_table(v), ""]
     (out / "results.md").write_text("\n".join(L), encoding="utf-8")
+
+
+FAMILY = {"naive_yesterday": "naive", "naive_lastweek": "naive", "gbm_1d": "gbm", "gbm": "gbm",
+          "lstm_1d": "lstm", "lstm_7d": "lstm"}
+
+
+def lookback_table(cv_mean: pd.DataFrame, test: pd.DataFrame) -> pd.DataFrame:
+    """모델 계열 × 과거 범위로 CV·테스트 MAE와 피크 F1을 나란히 놓는다."""
+    rows = []
+    for m, fam in FAMILY.items():
+        if m not in set(test["model"]):
+            continue
+        c = cv_mean.set_index("model").loc[m]
+        t = test.set_index("model").loc[m]
+        rows.append({"family": fam, "lookback": t["lookback"], "model": m, "cv_mae": c["mae"],
+                     "cv_daily_max_mae": c["daily_max_mae"], "test_mae": t["mae"], "test_f1": t["f1"]})
+    return pd.DataFrame(rows).sort_values(["family", "lookback"])
 
 
 def make_figures(out: Path, preds: pd.DataFrame, selected: str, thr: float, slices: dict):

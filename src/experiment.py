@@ -29,6 +29,17 @@ def fit_predict(model, tr, te, cols, policy=C.COPY_POLICY):
     return model.predict(te[cols]), tr
 
 
+def fit_predict_model(model, lookback: str, feat: pd.DataFrame, tr: pd.DataFrame, te: pd.DataFrame,
+                      policy=C.COPY_POLICY):
+    """모델 종류에 맞게 학습·예측. 행 단위 모델은 피처 행렬을, 시퀀스 모델은 연속 프레임과 행 위치를 받는다.
+    어느 쪽이든 학습 타깃은 같은 행(_train_rows: 정전 제외, 복제일 정책 적용)으로 제한한다."""
+    if getattr(model, "needs_full_frame", False):
+        used = _train_rows(tr, policy)
+        model.fit_frame(feat, used.index)          # 시퀀스 모델은 표본 가중치를 쓰지 않는다
+        return model.predict_frame(feat, te.index), used
+    return fit_predict(model, tr, te, feature_columns(lookback=lookback), policy)
+
+
 def peak_threshold(tr: pd.DataFrame) -> float:
     """피크 임계값은 항상 학습 구간에서만 정한다."""
     return float(tr.loc[~tr["zero_power"], "kw"].quantile(C.PEAK_QUANTILE))
@@ -67,14 +78,15 @@ def train_test(feat: pd.DataFrame):
 
 
 # ── 실험 ───────────────────────────────────────────────────────────────
-def run_cv(feat: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
+def run_cv(feat: pd.DataFrame) -> pd.DataFrame:
     rows = []
     for fold, tr, val, score, purged in cv_folds(feat):
+        print(f"      폴드 {fold}", flush=True)
         thr = peak_threshold(tr)
-        for name, (kind, model) in make_models().items():
-            p, used = fit_predict(model, tr, val, cols)
+        for name, (kind, model, lookback) in make_models().items():
+            p, used = fit_predict_model(model, lookback, feat, tr, val)
             r = evaluate(val[score], p[score], thr)
-            r.update(fold=fold, model=name, kind=kind, n_train_days=int(used["date"].nunique()),
+            r.update(fold=fold, model=name, kind=kind, lookback=lookback, n_train_days=int(used["date"].nunique()),
                      n_purged_days=purged, n_scored_days=int(val.loc[score, "date"].nunique()))
             rows.append(r)
     return pd.DataFrame(rows)
@@ -87,16 +99,16 @@ def select_model(cv: pd.DataFrame) -> str:
     return str(s.idxmin())
 
 
-def run_test(feat: pd.DataFrame, cols: list[str]):
+def run_test(feat: pd.DataFrame):
     """테스트 직전까지 전체로 재학습 → 테스트 구간 day-ahead 예측."""
     tr, te = train_test(feat)
     thr = peak_threshold(tr)
     rows, preds = [], te[["ts", "date", "hour", "slot", "dow", "kw", "prod", "zero_power"]].copy()
-    for name, (kind, model) in make_models().items():
-        p, _ = fit_predict(model, tr, te, cols)
+    for name, (kind, model, lookback) in make_models().items():
+        p, _ = fit_predict_model(model, lookback, feat, tr, te)
         preds[name] = p
         r = evaluate(te, p, thr)
-        r.update(model=name, kind=kind)
+        r.update(model=name, kind=kind, lookback=lookback)
         rows.append(r)
     return pd.DataFrame(rows), preds, thr
 
@@ -107,10 +119,12 @@ def run_ablations(feat: pd.DataFrame) -> pd.DataFrame:
         ("baseline (config)", C.COPY_POLICY, C.PRODUCTION_PLAN, C.USE_WEATHER),
         ("copy days dropped", "drop", C.PRODUCTION_PLAN, C.USE_WEATHER),
         ("copy days weighted 1/n", "weight", C.PRODUCTION_PLAN, C.USE_WEATHER),
-        ("hourly production plan", C.COPY_POLICY, "hourly", C.USE_WEATHER),
-        ("daily production plan only", C.COPY_POLICY, "daily", C.USE_WEATHER),
-        ("no production plan", C.COPY_POLICY, "none", C.USE_WEATHER),
-        ("no weather", C.COPY_POLICY, C.PRODUCTION_PLAN, False),
+        ("production plan: daily total", C.COPY_POLICY, "daily", C.USE_WEATHER),
+        ("production plan: hourly", C.COPY_POLICY, "hourly", C.USE_WEATHER),
+        ("production plan: none", C.COPY_POLICY, "none", C.USE_WEATHER),
+        ("weather: on", C.COPY_POLICY, C.PRODUCTION_PLAN, True),
+        ("weather: off", C.COPY_POLICY, C.PRODUCTION_PLAN, False),
+        ("hourly plan + weather", C.COPY_POLICY, "hourly", True),
     ]
     folds = list(cv_folds(feat))
     rows, seen = [], set()

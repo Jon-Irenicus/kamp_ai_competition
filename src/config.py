@@ -21,16 +21,50 @@ HOLIDAYS = [
     "2021-01-01", "2021-02-11", "2021-02-12", "2021-02-13", "2021-03-01",
     "2021-05-05", "2021-05-19", "2021-08-16",
 ]
-# 공장 휴무 계획(여름휴가 등). "사전에 아는 계획"일 때만 채운다.
+# 공장 휴무 계획(여름휴가 등). "사전에 아는 계획"일 때만 채운다. USE_PLANNED_SHUTDOWN이 True일 때만 사용.
 # 데이터를 보고 전력이 낮은 날을 골라 채우면 누수가 된다.
 PLANNED_SHUTDOWNS: list[str] = []
 
 # ── 예측 과제 정의 ─────────────────────────────────────────────────────
 # Day-ahead: D일 00:00 시점에, D-1일까지의 실측 전력으로 D일 96개 15분 슬롯을 예측.
-# D일 생산량을 생산계획으로 미리 안다는 가정의 수준. 성능에 가장 큰 영향을 주는 가정이므로 보고서에 명시.
-#   "hourly": 시간별 생산계획을 안다(낙관적) | "daily": 일 생산계획 총량만 안다 | "none": 모른다
-PRODUCTION_PLAN = "hourly"
-USE_WEATHER = True           # 기상예보 ≈ 실측 가정 (실제 운영 시 예보 오차만큼 성능 하락)
+# 기본값은 "예측 시점에 확실히 알 수 있는 정보만" 쓴다(달력, 과거 전력).
+# 아래 정보는 미래에 확정되지 않으므로 기본적으로 끄고, ablation에서 켰을 때의 효과만 보고한다.
+#   PRODUCTION_PLAN: "hourly" 시간별 계획 | "daily" 일 총량만 | "none" 사용 안 함
+#   USE_WEATHER: 기상(실측을 예보 대용으로 쓰는 가정)
+#   USE_PLANNED_SHUTDOWN: 계획 휴무 달력(PLANNED_SHUTDOWNS)
+PRODUCTION_PLAN = "none"
+USE_WEATHER = False
+USE_PLANNED_SHUTDOWN = False
+
+# 월(month) 피처. 학습 기간 8월 평일의 절반이 휴가 주간(8/2~8/6)이라, 생산계획 없이는 월 피처가
+# 휴가를 "8월의 특성"으로 학습했다. 빼면 CV MAE가 gbm 33.4→27.1, gbm_1d 25.8→21.5로 개선되어
+# 사전 규칙(CV 기준 결정)에 따라 끈다. 트리 모델(month)과 LSTM(month sin/cos)에 함께 적용된다.
+USE_MONTH = False
+
+# ── 입력 과거 범위(lookback) 비교 ─────────────────────────────────────
+# 같은 모델 계열을 "전날만 입력(1d)"과 "지난주까지 입력(7d)" 두 경우로 학습해 비교한다.
+#   트리 모델: 1d = lag_1d + 전날 통계, 7d = 여기에 lag_7d와 지난주 평균 추가
+#   LSTM: 인코더 입력 길이 = 96칸(1d) 또는 672칸(7d)
+# 학습 데이터 범위는 두 경우 모두 "예측일 이전 전체"(확장 윈도우)로 같다.
+# LSTM 모델별 설정. window = 인코더(과거 입력) 길이, decoder_lags = 디코더(미래 입력)에 넣는 예측 칸별 과거 전력.
+# 노트북(LSTM_prediction.ipynb)처럼 디코더에 같은 칸의 과거 전력을 넣되, 과거 범위 정의를 지키도록
+# lstm_1d는 1일 전 값만, lstm_7d는 1일 전·7일 전 값을 받는다(트리 gbm_1d / gbm과 같은 구분).
+# 인코더에는 래그를 넣지 않는다(과거 칸의 래그는 창보다 더 먼 과거를 보게 되므로).
+LSTM_MODELS = {
+    "lstm_1d": dict(window=96, decoder_lags=["lag_1d"]),
+    "lstm_7d": dict(window=96 * 7, decoder_lags=["lag_1d", "lag_7d"]),
+}
+RUN_LSTM = True                  # torch가 없거나 --skip-lstm이면 자동으로 건너뜀
+LSTM_PARAMS = dict(hidden_size=128, num_layers=2, dropout=0.2)   # 첨부 Seq2SeqLSTM 기본값
+# 학습 설정은 LSTM_prediction.ipynb에서 쓴 값을 따른다.
+LSTM_TRAIN = dict(
+    epochs=150, batch_size=64,
+    lr=2e-4, weight_decay=1e-5,                    # AdamW
+    scheduler_factor=0.5, scheduler_patience=10,   # ReduceLROnPlateau (모니터 손실 기준)
+    patience=20,       # 모니터 손실이 이만큼 연속 개선되지 않으면 중단
+    monitor_days=7,    # 학습 구간 마지막 7일을 조기 종료 모니터로 사용(검증 주와 별개, 복제그룹 제거)
+    stride=4,          # 학습 샘플 시작 간격(15분 칸 수). 1이면 노트북과 같이 모든 칸에서 시작(약 4배 느림)
+)
 
 # 정전(15분 수요가 정확히 0인 칸)은 타깃으로는 그대로 두되, 래그·전날 통계를 계산할 때는
 # "같은 요일·같은 15분 칸의 최근 N주 중앙값"으로 대체한다. 직전 값 유지는 정전 직전 값이 이미
