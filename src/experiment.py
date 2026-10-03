@@ -1,4 +1,4 @@
-"""교차검증(주 단위 walk-forward), 최종 테스트, ablation, 누수 시연, 오류 슬라이스."""
+"""교차검증(주 단위 walk-forward), 최종 테스트, ablation, 분할 방식 비교, 오류 슬라이스."""
 from __future__ import annotations
 
 import numpy as np
@@ -7,16 +7,13 @@ from sklearn.model_selection import GroupShuffleSplit, train_test_split
 
 from . import config as C
 from .features import feature_columns
-from .metrics import evaluate, regression
+from .metrics import HIT_COL, K, TOPK_MAE_COL, daily_matrix, evaluate, regression, topk_scores
 from .models import make_gbm, make_models
 
 
 # ── 공통 ───────────────────────────────────────────────────────────────
 def _train_rows(tr: pd.DataFrame, policy: str) -> pd.DataFrame:
-    tr = tr[~tr["zero_power"]]                  # 정전·셧다운 구간은 학습에서 제외
-    if policy == "drop":
-        tr = tr[~tr["is_copy_day"]]
-    return tr
+    return tr[~tr["is_copy_day"]] if policy == "drop" else tr
 
 
 def _weights(tr: pd.DataFrame, policy: str):
@@ -29,20 +26,25 @@ def fit_predict(model, tr, te, cols, policy=C.COPY_POLICY):
     return model.predict(te[cols]), tr
 
 
-def peak_threshold(tr: pd.DataFrame) -> float:
-    """피크 임계값은 항상 학습 구간에서만 정한다."""
-    return float(tr.loc[~tr["zero_power"], "kw"].quantile(C.PEAK_QUANTILE))
+def fit_predict_model(model, lookback: str, feat: pd.DataFrame, tr: pd.DataFrame, te: pd.DataFrame,
+                      policy=C.COPY_POLICY):
+    """행 단위 모델은 피처 행렬로, 시퀀스 모델(needs_full_frame)은 연속 프레임과 행 위치로 학습·예측한다."""
+    if getattr(model, "needs_full_frame", False):
+        used = _train_rows(tr, policy)
+        model.fit_frame(feat, used.index)
+        return model.predict_frame(feat, te.index), used
+    return fit_predict(model, tr, te, feature_columns(lookback=lookback), policy)
 
 
 def wavg(df: pd.DataFrame, col: str, w: str = "n_scored_days") -> float:
-    """NaN을 건너뛰는 가중평균(폴드별 지표 → 전체 CV 지표)."""
+    """폴드별 지표의 채점일 수 가중평균(NaN 제외)."""
     m = df[col].notna() & (df[w] > 0)
     return float(np.average(df.loc[m, col], weights=df.loc[m, w])) if m.any() else np.nan
 
 
-# ── 폴드 ───────────────────────────────────────────────────────────────
+# ── 분할 ───────────────────────────────────────────────────────────────
 def cv_folds(feat: pd.DataFrame):
-    """(이름, 학습, 검증, 채점마스크, 제거된 학습일 수)를 주 단위로 생성."""
+    """(폴드명, 학습, 검증, 채점 마스크, 제거된 학습일 수)를 주 단위로 생성한다."""
     test_start = pd.Timestamp(C.TEST_START)
     for a in pd.date_range(C.CV_START, test_start - pd.Timedelta(days=1), freq=f"{C.CV_FOLD_DAYS}D"):
         b = min(a + pd.Timedelta(days=C.CV_FOLD_DAYS), test_start)
@@ -67,50 +69,51 @@ def train_test(feat: pd.DataFrame):
 
 
 # ── 실험 ───────────────────────────────────────────────────────────────
-def run_cv(feat: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
+def run_cv(feat: pd.DataFrame) -> pd.DataFrame:
     rows = []
     for fold, tr, val, score, purged in cv_folds(feat):
-        thr = peak_threshold(tr)
-        for name, (kind, model) in make_models().items():
-            p, used = fit_predict(model, tr, val, cols)
-            r = evaluate(val[score], p[score], thr)
-            r.update(fold=fold, model=name, kind=kind, n_train_days=int(used["date"].nunique()),
+        print(f"      폴드 {fold}", flush=True)
+        for name, (kind, model, lookback) in make_models().items():
+            p, used = fit_predict_model(model, lookback, feat, tr, val)
+            r = evaluate(val[score], p[score])
+            r.update(fold=fold, model=name, kind=kind, lookback=lookback, n_train_days=int(used["date"].nunique()),
                      n_purged_days=purged, n_scored_days=int(val.loc[score, "date"].nunique()))
             rows.append(r)
     return pd.DataFrame(rows)
 
 
 def select_model(cv: pd.DataFrame) -> str:
-    """선정 규칙(사전 고정): 점예측 모델 중 CV MAE(채점일 가중) 최소. 테스트는 선정에 쓰지 않는다."""
+    """점예측 모델 중 CV MAE(채점일 가중) 최소. 테스트 구간은 선정에 사용하지 않는다."""
     d = cv[cv["kind"] == "point"]
     s = pd.Series({m: wavg(g, "mae") for m, g in d.groupby("model")})
     return str(s.idxmin())
 
 
-def run_test(feat: pd.DataFrame, cols: list[str]):
-    """테스트 직전까지 전체로 재학습 → 테스트 구간 day-ahead 예측."""
+def run_test(feat: pd.DataFrame):
+    """테스트 시작 전 전체 구간으로 재학습한 뒤 테스트 구간을 day-ahead로 예측한다."""
     tr, te = train_test(feat)
-    thr = peak_threshold(tr)
-    rows, preds = [], te[["ts", "date", "hour", "slot", "dow", "kw", "prod", "zero_power"]].copy()
-    for name, (kind, model) in make_models().items():
-        p, _ = fit_predict(model, tr, te, cols)
+    rows, preds = [], te[["ts", "date", "hour", "slot", "dow", "kw", "prod"]].copy()
+    for name, (kind, model, lookback) in make_models().items():
+        p, _ = fit_predict_model(model, lookback, feat, tr, te)
         preds[name] = p
-        r = evaluate(te, p, thr)
-        r.update(model=name, kind=kind)
+        r = evaluate(te, p)
+        r.update(model=name, kind=kind, lookback=lookback)
         rows.append(r)
-    return pd.DataFrame(rows), preds, thr
+    return pd.DataFrame(rows), preds
 
 
 def run_ablations(feat: pd.DataFrame) -> pd.DataFrame:
-    """GBM 기준으로 설정을 하나씩 바꿔 CV 성능 변화를 본다(테스트는 건드리지 않음)."""
+    """GBM 기준으로 설정을 하나씩 바꿨을 때의 CV 성능."""
     variants = [
         ("baseline (config)", C.COPY_POLICY, C.PRODUCTION_PLAN, C.USE_WEATHER),
         ("copy days dropped", "drop", C.PRODUCTION_PLAN, C.USE_WEATHER),
         ("copy days weighted 1/n", "weight", C.PRODUCTION_PLAN, C.USE_WEATHER),
-        ("hourly production plan", C.COPY_POLICY, "hourly", C.USE_WEATHER),
-        ("daily production plan only", C.COPY_POLICY, "daily", C.USE_WEATHER),
-        ("no production plan", C.COPY_POLICY, "none", C.USE_WEATHER),
-        ("no weather", C.COPY_POLICY, C.PRODUCTION_PLAN, False),
+        ("production plan: daily total", C.COPY_POLICY, "daily", C.USE_WEATHER),
+        ("production plan: hourly", C.COPY_POLICY, "hourly", C.USE_WEATHER),
+        ("production plan: none", C.COPY_POLICY, "none", C.USE_WEATHER),
+        ("weather: on", C.COPY_POLICY, C.PRODUCTION_PLAN, True),
+        ("weather: off", C.COPY_POLICY, C.PRODUCTION_PLAN, False),
+        ("hourly plan + weather", C.COPY_POLICY, "hourly", True),
     ]
     folds = list(cv_folds(feat))
     rows, seen = [], set()
@@ -120,20 +123,20 @@ def run_ablations(feat: pd.DataFrame) -> pd.DataFrame:
         seen.add((policy, prod, weather))
         cols = feature_columns(prod, weather)
         fr = []
-        for fold, tr, val, score, _ in folds:
+        for _, tr, val, score, _ in folds:
             p, _ = fit_predict(make_gbm(), tr, val, cols, policy)
-            r = evaluate(val[score], p[score], peak_threshold(tr))
+            r = evaluate(val[score], p[score])
             r["n_scored_days"] = int(val.loc[score, "date"].nunique())
             fr.append(r)
         fr = pd.DataFrame(fr)
         rows.append({"variant": name, **{c: wavg(fr, c) for c in
-                     ["mae", "nmae", "daily_max_mae", "f1", "fn", "fp"]}})
+                     ["mae", "nmae", "daily_max_mae", HIT_COL, TOPK_MAE_COL]}})
     return pd.DataFrame(rows)
 
 
 def run_leakage_demo(feat: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
-    """같은 GBM이라도 분할 방식에 따라 점수가 얼마나 부풀려지는지 보여준다."""
-    d = feat[~feat["zero_power"]].reset_index(drop=True)
+    """동일 GBM을 무작위 분할 단위(행·일·복제그룹)만 바꿔 평가한다."""
+    d = feat.reset_index(drop=True)
     splits = {}
     a, b = train_test_split(d.index, test_size=0.2, random_state=C.SEED)
     splits["random rows (80/20)"] = (a, b)
@@ -148,20 +151,24 @@ def run_leakage_demo(feat: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def error_slices(preds: pd.DataFrame, model: str, thr: float) -> dict[str, pd.DataFrame]:
-    """오차와 FN/FP가 어떤 조건에 몰리는지 — 오류분석(평가항목 3)의 출발점."""
+def error_slices(preds: pd.DataFrame, model: str) -> dict[str, pd.DataFrame]:
+    """시간대·요일·생산량 구간·일자별 오차와 피크 적중."""
     d = preds.copy()
     d["err"] = d[model] - d["kw"]
-    d["fn"] = (d["kw"] >= thr) & (d[model] < thr)
-    d["fp"] = (d["kw"] < thr) & (d[model] >= thr)
-    d["prod_bin"] = pd.cut(d["prod"], [-np.inf, 0, 500, 1500, np.inf],
-                           labels=["0", "1-500", "501-1500", ">1500"])
+    d["prod_bin"] = pd.cut(d["prod"], [-np.inf, 0, 500, 1500, np.inf], labels=["0", "1-500", "501-1500", ">1500"])
+
+    a = daily_matrix(d, "kw")
+    p = daily_matrix(d, model)
+    hits, tmae = topk_scores(a.to_numpy(), p.to_numpy())
+    by_day = pd.DataFrame({"date": a.index, "dow": d.groupby("date")["dow"].first().reindex(a.index).to_numpy(),
+                           "mae": d.groupby("date")["err"].apply(lambda e: e.abs().mean()).reindex(a.index).to_numpy(),
+                           f"top{K}_hits": hits, TOPK_MAE_COL: tmae,
+                           "daily_max_err": p.max(axis=1).to_numpy() - a.max(axis=1).to_numpy()})
 
     def agg(key):
         g = d.groupby(key, observed=True)
-        return pd.DataFrame({
-            "mae": g["err"].apply(lambda e: e.abs().mean()), "bias": g["err"].mean(),
-            "fn": g["fn"].sum(), "fp": g["fp"].sum(), "n": g.size(),
-        }).reset_index()
+        return pd.DataFrame({"mae": g["err"].apply(lambda e: e.abs().mean()), "bias": g["err"].mean(),
+                             "n": g.size()}).reset_index()
 
-    return {"by_hour": agg("hour"), "by_dow": agg("dow"), "by_prod": agg("prod_bin")}
+    by_dow = agg("dow").merge(by_day.groupby("dow")[[f"top{K}_hits", TOPK_MAE_COL]].mean().reset_index(), on="dow")
+    return {"by_hour": agg("hour"), "by_dow": by_dow, "by_prod": agg("prod_bin"), "by_day": by_day}

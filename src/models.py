@@ -1,8 +1,7 @@
-"""베이스라인과 비교 모델.
+"""기준 모델과 비교 모델.
 
-모든 모델은 fit(X, y, sample_weight=None) / predict(X) 인터페이스를 따른다.
-새 모델(GRU 등)을 추가하려면 같은 인터페이스로 클래스를 만들고 make_models()에 등록하면
-교차검증·홀드아웃·결과표에 자동으로 포함된다.
+모든 행 단위 모델은 fit(X, y, sample_weight=None) / predict(X) 인터페이스를 따른다.
+시퀀스 모델은 needs_full_frame=True로 표시하고 fit_frame / predict_frame을 구현한다(src/seq.py).
 """
 from __future__ import annotations
 
@@ -20,11 +19,21 @@ except ImportError:
 
 
 def gbm_backend() -> str:
-    return f"lightgbm {lgb.__version__}" if _HAS_LGB else "sklearn HistGradientBoosting (lightgbm 미설치)"
+    return f"lightgbm {lgb.__version__}" if _HAS_LGB else "sklearn HistGradientBoosting"
+
+
+class Yesterday:
+    """1일 전 동일 구간의 실측값."""
+
+    def fit(self, X, y, sample_weight=None):
+        return self
+
+    def predict(self, X):
+        return X["lag_1d"].to_numpy(dtype=float)
 
 
 class SeasonalNaive:
-    """지난주 같은 요일·같은 15분 슬롯의 실측값."""
+    """7일 전 동일 구간의 실측값."""
 
     def fit(self, X, y, sample_weight=None):
         return self
@@ -34,7 +43,7 @@ class SeasonalNaive:
 
 
 class ProfileMean:
-    """학습기간의 (휴무일 여부, 요일, 슬롯)별 평균 프로파일."""
+    """학습 구간의 (휴무일 여부, 요일, 구간)별 평균."""
 
     keys = ["is_off_day", "dow", "slot"]
 
@@ -65,12 +74,26 @@ def make_gbm(quantile: float | None = None):
     return HistGradientBoostingRegressor(**params, random_state=C.SEED)
 
 
-def make_models() -> dict[str, tuple[str, object]]:
-    """이름 → (종류, 새 인스턴스). 종류: point(점예측) | risk(피크위험용 상위분위 예측)."""
-    return {
-        "naive_lastweek": ("point", SeasonalNaive()),
-        "profile_mean": ("point", ProfileMean()),
-        "random_forest": ("point", RandomForestRegressor(**C.RF_PARAMS, random_state=C.SEED, n_jobs=-1)),
-        "gbm": ("point", make_gbm()),
-        f"gbm_q{int(C.RISK_QUANTILE * 100)}": ("risk", make_gbm(quantile=C.RISK_QUANTILE)),
+def make_models() -> dict[str, tuple[str, object, str]]:
+    """모델명 → (종류, 인스턴스, 입력 범위).
+    종류: point(점예측) | risk(상위 분위 예측). 입력 범위: 1d(1일 전까지) | 7d(7일 전까지)."""
+    models = {
+        "naive_yesterday": ("point", Yesterday(), "1d"),
+        "naive_lastweek": ("point", SeasonalNaive(), "7d"),
+        "profile_mean": ("point", ProfileMean(), "7d"),
+        "random_forest": ("point", RandomForestRegressor(**C.RF_PARAMS, random_state=C.SEED, n_jobs=-1), "7d"),
+        "gbm_1d": ("point", make_gbm(), "1d"),
+        "gbm": ("point", make_gbm(), "7d"),
+        f"gbm_q{int(C.RISK_QUANTILE * 100)}": ("risk", make_gbm(quantile=C.RISK_QUANTILE), "7d"),
     }
+    if lstm_available():
+        from .seq import LSTMForecaster
+        for name, cfg in C.LSTM_MODELS.items():
+            models[name] = ("point", LSTMForecaster(cfg["window"], name, cfg["decoder_lags"]),
+                            f"{cfg['window'] // 96}d")
+    return models
+
+
+def lstm_available() -> bool:
+    from .seq import HAS_TORCH
+    return C.RUN_LSTM and HAS_TORCH
