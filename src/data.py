@@ -83,11 +83,18 @@ def clean(raw: pd.DataFrame) -> tuple[pd.DataFrame, dict, pd.DataFrame]:
     rep["weather_missing_before"] = {c: int(df[c].isna().sum()) for c in C.WEATHER_COLS}
     df[C.WEATHER_COLS] = df[C.WEATHER_COLS].interpolate(limit_direction="both")
 
-    # 5) 전력 0 구간(정전·셧다운 추정): 학습에서 제외, 평가는 포함/제외 둘 다 보고
+    # 5) 전력 0(정전·셧다운 추정). 시간 단위 표시(네 칸 모두 0)는 정전이 시간 중간에 시작·종료되면
+    #    일부 칸을 놓치므로, 15분 단위 판정은 features.to_long에서 다시 한다(kw == 0).
+    #    학습에서는 제외, 평가는 포함/제외 둘 다 보고, 래그 계산 시에는 대체값 사용.
     df["zero_power"] = df[C.POWER_COLS].sum(axis=1).eq(0)
+    zero_slots = df[C.POWER_COLS].eq(0)
     rep["zero_power_hours"] = {
         "n": int(df["zero_power"].sum()),
         "dates": sorted(df.loc[df["zero_power"], "date"].dt.strftime("%Y-%m-%d").unique().tolist()),
+    }
+    rep["zero_power_15min_slots"] = {
+        "n": int(zero_slots.to_numpy().sum()),
+        "dates": sorted(df.loc[zero_slots.any(axis=1), "date"].dt.strftime("%Y-%m-%d").unique().tolist()),
     }
 
     # 6) 증강 복제일 탐지

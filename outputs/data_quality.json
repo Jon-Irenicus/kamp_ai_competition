@@ -48,6 +48,14 @@
       "2021-08-29"
     ]
   },
+  "zero_power_15min_slots": {
+    "n": 74,
+    "dates": [
+      "2021-08-28",
+      "2021-08-29",
+      "2021-09-08"
+    ]
+  },
   "duplicate_days": {
     "n_days": 257,
     "n_unique_profiles": 142,

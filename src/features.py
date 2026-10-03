@@ -30,6 +30,7 @@ def to_long(hourly: pd.DataFrame) -> pd.DataFrame:
     long = long.drop(columns="q_col").sort_values("ts").reset_index(drop=True)
     long["slot"] = long["hour"] * 4 + long["quarter"]
     long["kw"] = long["kw"].astype(float)
+    long["zero_power"] = long["kw"].eq(0)   # 정전 표시를 15분 단위로 다시 판정
 
     expected = pd.date_range(long["ts"].min(), long["ts"].max(), freq="15min")
     if len(expected) != len(long) or not (expected == pd.DatetimeIndex(long["ts"])).all():
@@ -37,13 +38,26 @@ def to_long(hourly: pd.DataFrame) -> pd.DataFrame:
     return long
 
 
+def lag_source(long: pd.DataFrame) -> pd.Series:
+    """래그 계산용 전력 시계열. 정전 칸을 같은 요일·같은 칸의 최근 N주 중앙값으로 대체한다.
+    과거 값만 쓰므로(t-7일, t-14일, …) 예측 시점 이후 정보는 들어가지 않는다."""
+    kw = long["kw"]
+    if not C.LAG_IMPUTE_OUTAGE:
+        return kw
+    masked = kw.mask(long["zero_power"])
+    past = pd.concat([masked.shift(SLOTS_PER_DAY * 7 * k) for k in range(1, C.LAG_IMPUTE_WEEKS + 1)], axis=1)
+    return masked.fillna(past.median(axis=1)).fillna(kw)   # 과거 이력이 없으면 원래 값
+
+
 def build_features(long: pd.DataFrame) -> pd.DataFrame:
     f = long.copy()
 
-    # 전력 래그 (D일 00:00에 모두 알려진 값)
-    f["lag_1d"] = f["kw"].shift(SLOTS_PER_DAY)
-    f["lag_7d"] = f["kw"].shift(SLOTS_PER_DAY * 7)
-    daily = f.groupby("date")["kw"].agg(day_mean="mean", day_max="max", day_last="last").asfreq("D")
+    # 전력 래그 (D일 00:00에 모두 알려진 값). 타깃 kw는 그대로, 래그만 대체 시계열에서 계산.
+    src = lag_source(f)
+    f["kw_lag_src"] = src
+    f["lag_1d"] = src.shift(SLOTS_PER_DAY)
+    f["lag_7d"] = src.shift(SLOTS_PER_DAY * 7)
+    daily = f.groupby("date")["kw_lag_src"].agg(day_mean="mean", day_max="max", day_last="last").asfreq("D")
     f = f.join(daily.shift(1).add_prefix("prev_"), on="date")
     f["lastweek_day_mean"] = f["date"].map(daily["day_mean"].shift(7))
 

@@ -7,7 +7,7 @@
   "seed": 42,
   "data": "dataset\\okm_augumented_2021.csv",
   "selected_model": "gbm",
-  "runtime_sec": 71.0,
+  "runtime_sec": 89.4,
   "config": {
     "COPY_POLICY": "keep",
     "COST_ONLY_COLS": [
@@ -37,6 +37,8 @@
       "2021-05-19",
       "2021-08-16"
     ],
+    "LAG_IMPUTE_OUTAGE": true,
+    "LAG_IMPUTE_WEEKS": 4,
     "LEAKAGE_COLS": [
       "공장인원"
     ],

@@ -61,7 +61,9 @@ def write_results_md(out: Path, dq: dict, groups: pd.DataFrame, cv: pd.DataFrame
         f"{dq['leakage_factory_staff']['max_abs_diff_vs_prod_over_power_sum']:.1e} → 타깃 누수로 제외",
         f"- 전기요금: 월별 상수 {dq['tariff_by_month']} → 예측 피처 제외, 비용 시뮬레이션용",
         f"- 기상 결측(보간 전): {dq['weather_missing_before']}",
-        f"- 전력 0 구간: {dq['zero_power_hours']['n']}시간 ({', '.join(dq['zero_power_hours']['dates'])})",
+        f"- 전력 0(15분 단위): {dq['zero_power_15min_slots']['n']}칸 ({', '.join(dq['zero_power_15min_slots']['dates'])}), "
+        f"시간 단위로는 {dq['zero_power_hours']['n']}시간 → 학습 제외, 래그 계산 시 같은 요일·칸 최근 {C.LAG_IMPUTE_WEEKS}주 중앙값으로 대체"
+        f"({'사용' if C.LAG_IMPUTE_OUTAGE else '미사용'})",
         f"- 복제일: {dup['n_days']}일 중 {dup['n_days_in_duplicate_groups']}일이 복제그룹 소속, "
         f"고유 프로파일 {dup['n_unique_profiles']}개, 월별 {dup['days_in_duplicate_groups_by_month']}",
         "", "상위 복제그룹:", "", md_table(groups.head(8)), "",
