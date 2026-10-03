@@ -1,7 +1,12 @@
-pandas==3.0.6
-numpy==2.5.3
-scikit-learn==1.9.1
-torch==2.14.0
+# 검증한 환경: Python 3.14.0
 ipykernel==7.3.0
+jupyter_client==8.10.0
+jupyter_core==5.9.1
+lightgbm==4.7.0
 matplotlib==3.11.2
-seaborn==0.13.2
+matplotlib-inline==0.2.2
+numpy==2.5.3
+optuna==5.0.0
+pandas==3.0.6
+scikit-learn==1.9.1
+shap==0.52.0
