@@ -4,15 +4,12 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import matplotlib
+import numpy as np
+import pandas as pd
+from matplotlib.figure import Figure   # pyplot 미사용: 전역 백엔드를 변경하지 않음
 
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt  # noqa: E402
-import numpy as np  # noqa: E402
-import pandas as pd  # noqa: E402
-
-from . import config as C  # noqa: E402
-from .metrics import HIT_COL, K, TOPK_MAE_COL, daily_matrix  # noqa: E402
+from . import config as C
+from .metrics import HIT_COL, K, TOPK_MAE_COL, daily_matrix
 
 METRIC_COLS = ["mae", "rmse", "nmae", "bias", "daily_max_mae", "daily_max_bias", HIT_COL, TOPK_MAE_COL]
 FAMILY = {"naive_yesterday": "naive", "naive_lastweek": "naive", "gbm_1d": "gbm", "gbm": "gbm",
@@ -116,7 +113,8 @@ def make_figures(out: Path, preds: pd.DataFrame, selected: str, slices: dict):
     top_a = np.argsort(-a, axis=1, kind="stable")[:, :K]
     top_p = np.argsort(-p, axis=1, kind="stable")[:, :K]
     day_idx = np.arange(len(a))[:, None] * 96
-    fig, ax = plt.subplots(figsize=(14, 4))
+    fig = Figure(figsize=(14, 4))
+    ax = fig.subplots()
     ax.plot(w["ts"], w["kw"], lw=1, color="black", label="actual")
     ax.plot(w["ts"], w[selected], lw=1, label=selected)
     ax.scatter(w["ts"].to_numpy()[(day_idx + top_a).ravel()], a.ravel()[(day_idx + top_a).ravel()],
@@ -127,11 +125,11 @@ def make_figures(out: Path, preds: pd.DataFrame, selected: str, slices: dict):
     ax.legend(loc="upper right", ncol=4, fontsize=8)
     fig.tight_layout()
     fig.savefig(fig_dir / "test_first_2weeks.png", dpi=130)
-    plt.close(fig)
 
     # (2) 시간대별 MAE와 편향
     h = slices["by_hour"]
-    fig, ax1 = plt.subplots(figsize=(10, 4))
+    fig = Figure(figsize=(10, 4))
+    ax1 = fig.subplots()
     ax1.bar(h["hour"], h["mae"], color="#8aa", label="MAE")
     ax1.plot(h["hour"], h["bias"], "o-", color="tab:red", label="bias")
     ax1.axhline(0, color="black", lw=0.6)
@@ -140,14 +138,13 @@ def make_figures(out: Path, preds: pd.DataFrame, selected: str, slices: dict):
     ax1.legend(fontsize=8)
     fig.tight_layout()
     fig.savefig(fig_dir / "error_by_hour.png", dpi=130)
-    plt.close(fig)
 
     # (3) 일자별 상위 K개 적중 수
     d = slices["by_day"]
-    fig, ax = plt.subplots(figsize=(12, 3.5))
+    fig = Figure(figsize=(12, 3.5))
+    ax = fig.subplots()
     ax.bar(pd.to_datetime(d["date"]), d[f"top{K}_hits"], color="#8aa")
     ax.set_ylim(0, K)
     ax.set_ylabel(f"top-{K} hits")
     fig.tight_layout()
     fig.savefig(fig_dir / f"daily_top{K}_hits.png", dpi=130)
-    plt.close(fig)
