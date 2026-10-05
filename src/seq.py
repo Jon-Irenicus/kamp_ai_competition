@@ -22,7 +22,7 @@ import numpy as np
 import pandas as pd
 
 from . import config as C
-from .features import SLOTS_PER_DAY, nn_future_columns
+from .features import SLOTS_PER_DAY, nn_future_columns, nn_past_columns
 
 try:
     import torch
@@ -36,15 +36,17 @@ HORIZON = SLOTS_PER_DAY
 class SequenceForecaster:
     needs_full_frame = True
 
-    def __init__(self, window: int, name: str = "seq", decoder_lags: list[str] | None = None):
+    def __init__(self, window: int, name: str = "seq", decoder_lags: list[str] | None = None,
+                 use_past_prod: bool | None = None):
         self.window = window
         self.name = name
         self.decoder_lags = list(decoder_lags or [])
+        self.use_past_prod = C.USE_PAST_PROD if use_past_prod is None else use_past_prod
 
     # ── 입력 구성 ──────────────────────────────────────────────────────
     def _columns(self):
-        fut = nn_future_columns()
-        return ["kw"] + fut, fut
+        # use_past_prod 도입 이전에 저장된 모델은 과거 생산량 없이 학습되었다.
+        return nn_past_columns(getattr(self, "use_past_prod", False)), nn_future_columns()
 
     def _fit_scaler(self, feat: pd.DataFrame, fit_index):
         past_cols, fut_cols = self._columns()

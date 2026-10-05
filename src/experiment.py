@@ -106,24 +106,27 @@ def run_test(feat: pd.DataFrame):
 
 def run_ablations(feat: pd.DataFrame) -> pd.DataFrame:
     """GBM 기준으로 설정을 하나씩 바꿨을 때의 CV 성능."""
+    past = C.USE_PAST_PROD
     variants = [
-        ("baseline (config)", C.COPY_POLICY, C.PRODUCTION_PLAN, C.USE_WEATHER),
-        ("copy days dropped", "drop", C.PRODUCTION_PLAN, C.USE_WEATHER),
-        ("copy days weighted 1/n", "weight", C.PRODUCTION_PLAN, C.USE_WEATHER),
-        ("production plan: daily total", C.COPY_POLICY, "daily", C.USE_WEATHER),
-        ("production plan: hourly", C.COPY_POLICY, "hourly", C.USE_WEATHER),
-        ("production plan: none", C.COPY_POLICY, "none", C.USE_WEATHER),
-        ("weather: on", C.COPY_POLICY, C.PRODUCTION_PLAN, True),
-        ("weather: off", C.COPY_POLICY, C.PRODUCTION_PLAN, False),
-        ("hourly plan + weather", C.COPY_POLICY, "hourly", True),
+        ("baseline (config)", C.COPY_POLICY, C.PRODUCTION_PLAN, C.USE_WEATHER, past),
+        ("copy days dropped", "drop", C.PRODUCTION_PLAN, C.USE_WEATHER, past),
+        ("copy days weighted 1/n", "weight", C.PRODUCTION_PLAN, C.USE_WEATHER, past),
+        ("past production: on", C.COPY_POLICY, C.PRODUCTION_PLAN, C.USE_WEATHER, True),
+        ("past production: off", C.COPY_POLICY, C.PRODUCTION_PLAN, C.USE_WEATHER, False),
+        ("production plan: daily total", C.COPY_POLICY, "daily", C.USE_WEATHER, past),
+        ("production plan: hourly", C.COPY_POLICY, "hourly", C.USE_WEATHER, past),
+        ("production plan: none", C.COPY_POLICY, "none", C.USE_WEATHER, past),
+        ("weather: on", C.COPY_POLICY, C.PRODUCTION_PLAN, True, past),
+        ("weather: off", C.COPY_POLICY, C.PRODUCTION_PLAN, False, past),
+        ("hourly plan + weather", C.COPY_POLICY, "hourly", True, past),
     ]
     folds = list(cv_folds(feat))
     rows, seen = [], set()
-    for name, policy, prod, weather in variants:
-        if (policy, prod, weather) in seen:
+    for name, policy, prod, weather, past_prod in variants:
+        if (policy, prod, weather, past_prod) in seen:
             continue
-        seen.add((policy, prod, weather))
-        cols = feature_columns(prod, weather)
+        seen.add((policy, prod, weather, past_prod))
+        cols = feature_columns(prod, weather, use_past_prod=past_prod)
         fr = []
         for _, tr, val, score, _ in folds:
             p, _ = fit_predict(make_gbm(), tr, val, cols, policy)

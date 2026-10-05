@@ -9,7 +9,7 @@
   "seed": 42,
   "data": "dataset\\okm_augumented_2021.csv",
   "selected_model": "lstm_1d",
-  "runtime_sec": 16121.2,
+  "runtime_sec": 16133.5,
   "config": {
     "COPY_POLICY": "keep",
     "COST_ONLY_COLS": [
@@ -21,6 +21,7 @@
     "CV_START": "2021-07-05",
     "DATA_PATH": "dataset\\okm_augumented_2021.csv",
     "ENCODING": "utf-8-sig",
+    "FINAL_MODEL_FILE": "final_model.pkl",
     "HGB_PARAMS": {
       "max_iter": 800,
       "learning_rate": 0.03,
@@ -100,12 +101,12 @@
       "min_samples_leaf": 3,
       "max_features": 0.5
     },
-    "RISK_QUANTILE": 0.8,
     "RUN_LEAKAGE_DEMO": true,
     "RUN_LSTM": true,
     "SEED": 42,
     "TEST_START": "2021-08-23",
     "USE_MONTH": false,
+    "USE_PAST_PROD": false,
     "USE_PLANNED_SHUTDOWN": false,
     "USE_WEATHER": false,
     "WEATHER_COLS": [
