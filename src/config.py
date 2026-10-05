@@ -6,6 +6,7 @@ SEED = 42
 # ── 데이터 ─────────────────────────────────────────────────────────────
 DATA_PATH = Path("dataset/okm_augumented_2021.csv")
 OUTPUT_DIR = Path("outputs")
+FINAL_MODEL_FILE = "final_model.pkl"   # 최종 테스트에서 학습한 선정 모델(OUTPUT_DIR 기준)
 ENCODING = "utf-8-sig"
 
 # 15분·30분·45분·60분: 각 15분 구간의 평균 수요전력(kW). 시각은 구간 시작 기준(00:00 = 00:00~00:15).

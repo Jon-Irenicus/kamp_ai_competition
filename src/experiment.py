@@ -90,16 +90,18 @@ def select_model(cv: pd.DataFrame) -> str:
 
 
 def run_test(feat: pd.DataFrame):
-    """테스트 시작 전 전체 구간으로 재학습한 뒤 테스트 구간을 day-ahead로 예측한다."""
+    """테스트 시작 전 전체 구간으로 재학습한 뒤 테스트 구간을 day-ahead로 예측한다.
+    반환: (지표, 예측, {모델명: 학습된 모델})"""
     tr, te = train_test(feat)
-    rows, preds = [], te[["ts", "date", "hour", "slot", "dow", "kw", "prod"]].copy()
+    rows, preds, fitted = [], te[["ts", "date", "hour", "slot", "dow", "kw", "prod"]].copy(), {}
     for name, (kind, model, lookback) in make_models().items():
         p, _ = fit_predict_model(model, lookback, feat, tr, te)
         preds[name] = p
+        fitted[name] = model
         r = evaluate(te, p)
         r.update(model=name, kind=kind, lookback=lookback)
         rows.append(r)
-    return pd.DataFrame(rows), preds
+    return pd.DataFrame(rows), preds, fitted
 
 
 def run_ablations(feat: pd.DataFrame) -> pd.DataFrame:

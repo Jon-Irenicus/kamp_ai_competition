@@ -16,6 +16,8 @@ LSTMForecaster가 torch 학습을 구현한다.
 """
 from __future__ import annotations
 
+import copy
+
 import numpy as np
 import pandas as pd
 
@@ -70,6 +72,18 @@ class SequenceForecaster:
         Fu = F[starts[:, None] + h]
         y = None if Y is None else Y[starts[:, None] + h]
         return X, Fu, y
+
+    def input_names(self) -> tuple[list[str], list[str]]:
+        """(과거 입력 피처명, 미래 입력 피처명). 미래 입력은 decoder_lags를 포함한다."""
+        past_cols, fut_cols = self._columns()
+        return past_cols, fut_cols + self.decoder_lags
+
+    def day_inputs(self, feat: pd.DataFrame, day_starts) -> tuple[np.ndarray, np.ndarray]:
+        """00:00 시작 위치별 (과거 입력 [n, window, p], 미래 입력 [n, 96, f]). 스케일 적용 상태."""
+        self._check_frame(feat)
+        P, F, _ = self._arrays(feat)
+        X, Fu, _ = self._batch(P, F, None, np.asarray(day_starts))
+        return X, Fu
 
     @staticmethod
     def _check_frame(feat: pd.DataFrame):
@@ -184,6 +198,14 @@ class LSTMForecaster(SequenceForecaster):
         print(f"      [{self.name}] samples={len(tr_starts):,} (purged {self.monitor_purged_}), "
               f"epochs={len(history)}, best_epoch={int(np.argmin(history)) + 1}, "
               f"lr={opt.param_groups[0]['lr']:.1e}, monitor_mae={best * self.y_std_:.2f} kW", flush=True)
+
+    def __getstate__(self):
+        """GPU에서 학습한 모델도 CPU 환경에서 불러올 수 있도록 CPU로 옮겨 저장한다."""
+        state = self.__dict__.copy()
+        if "net_" in state:
+            state["net_"] = copy.deepcopy(self.net_).cpu()
+            state["device_"] = torch.device("cpu")
+        return state
 
     def _monitor_mae(self, P, F, Y, starts) -> float:
         errs = []

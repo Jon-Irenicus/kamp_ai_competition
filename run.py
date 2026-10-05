@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import argparse
+import pickle
 import platform
 import random
 import time
@@ -69,9 +70,11 @@ def main():
     step(f"      선정 모델: {selected}")
 
     step("4/7 최종 테스트")
-    test, preds = run_test(feat)
+    test, preds, fitted = run_test(feat)
     test.to_csv(args.out / "metrics_test.csv", index=False)
     preds.to_csv(args.out / "predictions_test.csv", index=False)
+    with open(args.out / C.FINAL_MODEL_FILE, "wb") as f:
+        pickle.dump(fitted[selected], f)
 
     abl = demo = None
     if not args.fast:
