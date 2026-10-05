@@ -64,8 +64,15 @@ RISK_QUANTILE = 0.80   # 분위수 회귀 모델의 분위
 # ── 모델 하이퍼파라미터 ────────────────────────────────────────────────
 RF_PARAMS = dict(n_estimators=300, min_samples_leaf=3, max_features=0.5)
 LGB_PARAMS = dict(
-    n_estimators=800, learning_rate=0.03, num_leaves=31, min_child_samples=20,
-    subsample=0.8, subsample_freq=1, colsample_bytree=0.8, reg_lambda=1.0,
+    n_estimators=700,
+    learning_rate=0.05,
+    subsample_freq=1,
+    num_leaves=15,
+    min_child_samples=218,
+    subsample=0.6931,
+    colsample_bytree=0.7319,
+    reg_lambda=0.003,
+    min_split_gain=0.2881,
 )
 HGB_PARAMS = dict(   # LightGBM 미설치 시 대체 구현
     max_iter=800, learning_rate=0.03, max_leaf_nodes=31, min_samples_leaf=20,

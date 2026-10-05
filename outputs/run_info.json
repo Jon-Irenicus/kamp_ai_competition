@@ -1,15 +1,15 @@
 {
-  "python": "3.12.3",
-  "numpy": "2.4.4",
-  "pandas": "3.0.2",
-  "scikit-learn": "1.8.0",
-  "gbm_backend": "sklearn HistGradientBoosting",
-  "torch": null,
-  "lstm_run": false,
+  "python": "3.14.0",
+  "numpy": "2.5.3",
+  "pandas": "3.0.6",
+  "scikit-learn": "1.9.1",
+  "gbm_backend": "lightgbm 4.7.0",
+  "torch": "2.14.0+cpu (cpu)",
+  "lstm_run": true,
   "seed": 42,
-  "data": "data/okm_augumented_2021.csv",
-  "selected_model": "gbm_1d",
-  "runtime_sec": 236.9,
+  "data": "dataset\\okm_augumented_2021.csv",
+  "selected_model": "lstm_1d",
+  "runtime_sec": 16121.2,
   "config": {
     "COPY_POLICY": "keep",
     "COST_ONLY_COLS": [
@@ -19,7 +19,7 @@
     "CV_FOLD_DAYS": 7,
     "CV_SCORE_ORIGINAL_ONLY": true,
     "CV_START": "2021-07-05",
-    "DATA_PATH": "data/okm_augumented_2021.csv",
+    "DATA_PATH": "dataset\\okm_augumented_2021.csv",
     "ENCODING": "utf-8-sig",
     "HGB_PARAMS": {
       "max_iter": 800,
@@ -43,14 +43,15 @@
       "공장인원"
     ],
     "LGB_PARAMS": {
-      "n_estimators": 800,
-      "learning_rate": 0.03,
-      "num_leaves": 31,
-      "min_child_samples": 20,
-      "subsample": 0.8,
+      "n_estimators": 700,
+      "learning_rate": 0.05,
       "subsample_freq": 1,
-      "colsample_bytree": 0.8,
-      "reg_lambda": 1.0
+      "num_leaves": 15,
+      "min_child_samples": 218,
+      "subsample": 0.6931,
+      "colsample_bytree": 0.7319,
+      "reg_lambda": 0.003,
+      "min_split_gain": 0.2881
     },
     "LSTM_MODELS": {
       "lstm_1d": {
