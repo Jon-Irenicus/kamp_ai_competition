@@ -95,7 +95,7 @@ def build_features(long: pd.DataFrame) -> pd.DataFrame:
     f["prev_day_prod_total"] = f["date"].map(prod_daily.asfreq("D").shift(1))
 
     f = f.dropna(subset=LAG_COLS).reset_index(drop=True)   # 첫 7일은 lag_7d가 없어 제외
-    na = f[CAL_COLS + SHUTDOWN_COLS + LAG_COLS + WEATHER_COLS + PROD_COLS + PAST_PROD_COLS
+    na = f[CAL_COLS + SHUTDOWN_COLS + LAG_COLS + WEATHER_COLS
            + SLOT_CYCLIC_COLS + DOW_ONEHOT_COLS + MONTH_CYCLIC_COLS].isna().sum()
     if na.any():
         raise ValueError(f"피처에 결측이 있습니다: {na[na > 0].to_dict()}")
@@ -108,8 +108,6 @@ def _optional_cols(prod_plan: str, use_weather: bool) -> list[str]:
         cols += SHUTDOWN_COLS
     if use_weather:
         cols += WEATHER_COLS
-    if prod_plan == "hourly":
-        cols += PROD_COLS
     elif prod_plan == "daily":
         cols += ["prod_day_total"]
     elif prod_plan != "none":
@@ -125,7 +123,6 @@ def feature_columns(prod_plan: str = C.PRODUCTION_PLAN, use_weather: bool = C.US
     if use_past_prod is None:
         use_past_prod = C.USE_PAST_PROD
     lags = LAG_1D_COLS + (LAG_7D_COLS if lookback == "7d" else [])
-    lags += PAST_PROD_COLS if use_past_prod else []
     cal = [c for c in CAL_COLS if C.USE_MONTH or c != "month"]
     return cal + lags + _optional_cols(prod_plan, use_weather)
 
