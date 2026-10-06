@@ -108,14 +108,10 @@ def _optional_cols(prod_plan: str, use_weather: bool) -> list[str]:
         cols += SHUTDOWN_COLS
     if use_weather:
         cols += WEATHER_COLS
-    elif prod_plan == "daily":
-        cols += ["prod_day_total"]
-    elif prod_plan != "none":
-        raise ValueError(f"PRODUCTION_PLAN은 hourly/daily/none 중 하나: {prod_plan}")
     return cols
 
 
-def feature_columns(prod_plan: str = C.PRODUCTION_PLAN, use_weather: bool = C.USE_WEATHER,
+def feature_columns( use_weather: bool = C.USE_WEATHER,
                     lookback: str = "7d", use_past_prod: bool | None = None) -> list[str]:
     """트리·기준 모델 피처. lookback="1d"는 1일 전 정보만, "7d"는 7일 전 정보까지 사용."""
     if lookback not in ("1d", "7d"):
@@ -127,7 +123,7 @@ def feature_columns(prod_plan: str = C.PRODUCTION_PLAN, use_weather: bool = C.US
     return cal + lags + _optional_cols(prod_plan, use_weather)
 
 
-def nn_future_columns(prod_plan: str = C.PRODUCTION_PLAN, use_weather: bool = C.USE_WEATHER) -> list[str]:
+def nn_future_columns(use_weather: bool = C.USE_WEATHER) -> list[str]:
     """LSTM 인코더·디코더 공통 입력(달력·상태). 디코더 래그는 seq.py에서 별도로 추가한다."""
     month = MONTH_CYCLIC_COLS if C.USE_MONTH else []
     return SLOT_CYCLIC_COLS + DOW_ONEHOT_COLS + month + NN_FLAG_COLS + _optional_cols(prod_plan, use_weather)

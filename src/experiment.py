@@ -93,7 +93,7 @@ def run_test(feat: pd.DataFrame):
     """테스트 시작 전 전체 구간으로 재학습한 뒤 테스트 구간을 day-ahead로 예측한다.
     반환: (지표, 예측, {모델명: 학습된 모델})"""
     tr, te = train_test(feat)
-    rows, preds, fitted = [], te[["ts", "date", "hour", "slot", "dow", "kw", "prod"]].copy(), {}
+    rows, preds, fitted = [], te[["ts", "date", "hour", "slot", "dow", "kw"]].copy(), {}
     for name, (kind, model, lookback) in make_models().items():
         p, _ = fit_predict_model(model, lookback, feat, tr, te)
         preds[name] = p
@@ -106,27 +106,20 @@ def run_test(feat: pd.DataFrame):
 
 def run_ablations(feat: pd.DataFrame) -> pd.DataFrame:
     """GBM 기준으로 설정을 하나씩 바꿨을 때의 CV 성능."""
-    past = C.USE_PAST_PROD
     variants = [
-        ("baseline (config)", C.COPY_POLICY, C.PRODUCTION_PLAN, C.USE_WEATHER, past),
-        ("copy days dropped", "drop", C.PRODUCTION_PLAN, C.USE_WEATHER, past),
-        ("copy days weighted 1/n", "weight", C.PRODUCTION_PLAN, C.USE_WEATHER, past),
-        ("past production: on", C.COPY_POLICY, C.PRODUCTION_PLAN, C.USE_WEATHER, True),
-        ("past production: off", C.COPY_POLICY, C.PRODUCTION_PLAN, C.USE_WEATHER, False),
-        ("production plan: daily total", C.COPY_POLICY, "daily", C.USE_WEATHER, past),
-        ("production plan: hourly", C.COPY_POLICY, "hourly", C.USE_WEATHER, past),
-        ("production plan: none", C.COPY_POLICY, "none", C.USE_WEATHER, past),
-        ("weather: on", C.COPY_POLICY, C.PRODUCTION_PLAN, True, past),
-        ("weather: off", C.COPY_POLICY, C.PRODUCTION_PLAN, False, past),
-        ("hourly plan + weather", C.COPY_POLICY, "hourly", True, past),
+        ("baseline (config)", C.COPY_POLICY, C.USE_WEATHER, past),
+        ("copy days dropped", "drop", C.USE_WEATHER, past),
+        ("copy days weighted 1/n", "weight", C.USE_WEATHER, past),
+        ("weather: on", C.COPY_POLICY, True, past),
+        ("weather: off", C.COPY_POLICY, False, past),
     ]
     folds = list(cv_folds(feat))
     rows, seen = [], set()
-    for name, policy, prod, weather, past_prod in variants:
-        if (policy, prod, weather, past_prod) in seen:
+    for name, policy, weather in variants:
+        if (policy, weather) in seen:
             continue
-        seen.add((policy, prod, weather, past_prod))
-        cols = feature_columns(prod, weather, use_past_prod=past_prod)
+        seen.add((policy, weather))
+        cols = feature_columns(weather)
         fr = []
         for _, tr, val, score, _ in folds:
             p, _ = fit_predict(make_gbm(), tr, val, cols, policy)
@@ -160,7 +153,6 @@ def error_slices(preds: pd.DataFrame, model: str) -> dict[str, pd.DataFrame]:
     """시간대·요일·생산량 구간·일자별 오차와 피크 적중."""
     d = preds.copy()
     d["err"] = d[model] - d["kw"]
-    d["prod_bin"] = pd.cut(d["prod"], [-np.inf, 0, 500, 1500, np.inf], labels=["0", "1-500", "501-1500", ">1500"])
 
     a = daily_matrix(d, "kw")
     p = daily_matrix(d, model)
@@ -172,8 +164,8 @@ def error_slices(preds: pd.DataFrame, model: str) -> dict[str, pd.DataFrame]:
 
     def agg(key):
         g = d.groupby(key, observed=True)
-        return pd.DataFrame({"mae": g["err"].apply(lambda e: e.abs().mean()), "bias": g["err"].mean(),
+        return pd.DataFrame({"mae": g["err"].apply(lambda e: e.abs().mean()),
                              "n": g.size()}).reset_index()
 
     by_dow = agg("dow").merge(by_day.groupby("dow")[[f"top{K}_hits", TOPK_MAE_COL]].mean().reset_index(), on="dow")
-    return {"by_hour": agg("hour"), "by_dow": by_dow, "by_prod": agg("prod_bin"), "by_day": by_day}
+    return {"by_hour": agg("hour"), "by_dow": by_dow, "by_day": by_day}
