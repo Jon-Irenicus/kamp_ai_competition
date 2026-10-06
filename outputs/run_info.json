@@ -1,15 +1,15 @@
 {
-  "python": "3.14.0",
-  "numpy": "2.5.3",
-  "pandas": "3.0.6",
-  "scikit-learn": "1.9.1",
-  "gbm_backend": "lightgbm 4.7.0",
-  "torch": "2.14.0+cpu (cpu)",
+  "python": "3.13.15",
+  "numpy": "2.1.3",
+  "pandas": "2.2.3",
+  "scikit-learn": "1.6.1",
+  "gbm_backend": "lightgbm 4.6.0",
+  "torch": "2.11.0+cu130 (cuda)",
   "lstm_run": true,
   "seed": 42,
-  "data": "dataset\\okm_augumented_2021.csv",
+  "data": "dataset/okm_augumented_2021.csv",
   "selected_model": "lstm_1d",
-  "runtime_sec": 16133.5,
+  "runtime_sec": 1374.3,
   "config": {
     "COPY_POLICY": "keep",
     "COST_ONLY_COLS": [
@@ -19,7 +19,7 @@
     "CV_FOLD_DAYS": 7,
     "CV_SCORE_ORIGINAL_ONLY": true,
     "CV_START": "2021-07-05",
-    "DATA_PATH": "dataset\\okm_augumented_2021.csv",
+    "DATA_PATH": "dataset/okm_augumented_2021.csv",
     "ENCODING": "utf-8-sig",
     "FINAL_MODEL_FILE": "final_model.pkl",
     "HGB_PARAMS": {
@@ -86,6 +86,7 @@
       "stride": 4
     },
     "OUTPUT_DIR": "outputs",
+    "PEAK_HIT_TOL_SLOTS": 1,
     "PEAK_TOP_K": 10,
     "PLANNED_SHUTDOWNS": [],
     "POWER_COLS": [
@@ -94,7 +95,6 @@
       "45분",
       "60분"
     ],
-    "PRODUCTION_PLAN": "none",
     "PURGE_DUPLICATE_GROUPS": true,
     "RF_PARAMS": {
       "n_estimators": 300,
@@ -105,8 +105,7 @@
     "RUN_LSTM": true,
     "SEED": 42,
     "TEST_START": "2021-08-23",
-    "USE_MONTH": false,
-    "USE_PAST_PROD": false,
+    "USE_MONTH": true,
     "USE_PLANNED_SHUTDOWN": false,
     "USE_WEATHER": false,
     "WEATHER_COLS": [
