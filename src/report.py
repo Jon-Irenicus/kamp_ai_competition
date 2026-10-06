@@ -11,7 +11,7 @@ from matplotlib.figure import Figure   # pyplot 미사용: 전역 백엔드를 �
 from . import config as C
 from .metrics import HIT_COL, K, TOPK_MAE_COL, daily_matrix
 
-METRIC_COLS = ["mae", "rmse", "nmae", "bias", "daily_max_mae", "daily_max_bias", HIT_COL, TOPK_MAE_COL]
+METRIC_COLS = ["mae", "rmse", "daily_max_mae", HIT_COL, TOPK_MAE_COL]
 FAMILY = {"naive_yesterday": "naive", "naive_lastweek": "naive", "gbm_1d": "gbm", "gbm": "gbm",
           "lstm_1d": "lstm", "lstm_7d": "lstm"}
 
@@ -34,7 +34,7 @@ def save_json(obj, path: Path):
 def cv_summary(cv: pd.DataFrame) -> pd.DataFrame:
     from .experiment import wavg
     return pd.DataFrame([
-        {"model": m, "kind": g["kind"].iloc[0], "lookback": g["lookback"].iloc[0],
+        {"model": m, "lookback": g["lookback"].iloc[0],
          **{c: wavg(g, c) for c in METRIC_COLS}, "mae_std_across_folds": g["mae"].std()}
         for m, g in cv.groupby("model")
     ]).sort_values("mae")
@@ -131,7 +131,6 @@ def make_figures(out: Path, preds: pd.DataFrame, selected: str, slices: dict):
     fig = Figure(figsize=(10, 4))
     ax1 = fig.subplots()
     ax1.bar(h["hour"], h["mae"], color="#8aa", label="MAE")
-    ax1.plot(h["hour"], h["bias"], "o-", color="tab:red", label="bias")
     ax1.axhline(0, color="black", lw=0.6)
     ax1.set_xlabel("hour")
     ax1.set_ylabel("kW")

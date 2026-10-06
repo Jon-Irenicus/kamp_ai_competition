@@ -1,7 +1,7 @@
 """평가지표.
 
-전체 오차: MAE, RMSE, NMAE, bias
-일 최대수요: daily_max_mae, daily_max_bias
+전체 오차: MAE, RMSE
+일 최대수요: daily_max_mae
 피크(일자별 상위 K개 15분 구간, K = config.PEAK_TOP_K)
   - top{K}_hit: 예측 상위 K개 구간 중 실제 상위 K개에 포함된 비율(순위 무관). 일자별로 계산해 평균한다.
                 실제값 동률을 고려해 K번째로 큰 실제값 이상인 구간을 모두 실제 피크로 본다.
@@ -26,7 +26,7 @@ def regression(y, p) -> dict:
     e = np.asarray(p, dtype=float) - y
     mae = float(np.mean(np.abs(e)))
     return {"mae": mae, "rmse": float(np.sqrt(np.mean(e ** 2))),
-            "nmae": mae / float(np.mean(y)), "bias": float(np.mean(e))}
+            }
 
 
 def daily_matrix(d: pd.DataFrame, col: str) -> pd.DataFrame:
@@ -65,7 +65,7 @@ def daily_peak(d: pd.DataFrame) -> dict:
     p = daily_matrix(d, "pred").to_numpy()
     diff = p.max(axis=1) - a.max(axis=1)
     hits, tmae = topk_scores(a, p)
-    return {"daily_max_mae": float(np.abs(diff).mean()), "daily_max_bias": float(diff.mean()),
+    return {"daily_max_mae": float(np.abs(diff).mean()),
             HIT_COL: float((hits / K).mean()), TOPK_MAE_COL: float(tmae.mean())}
 
 
