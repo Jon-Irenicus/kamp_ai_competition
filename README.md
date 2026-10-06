@@ -34,11 +34,12 @@ python run.py --fast       # ablation·누수 시연 생략(반복 실험용)
 분석 노트북은 `run.py` 실행 후에 연다.
 
 ```bash
-pip install jupyter                      # 선택: shap도 설치하면 02 노트북에 SHAP 그림이 추가됨
+pip install jupyter                  
 jupyter notebook notebooks/
 # 명령줄에서 실행 결과까지 저장하려면
 jupyter nbconvert --to notebook --execute notebooks/01_data_diagnosis.ipynb --output-dir outputs/notebooks
 jupyter nbconvert --to notebook --execute notebooks/02_results_analysis.ipynb --output-dir outputs/notebooks
+jupyter nbconvert --to notebook --execute notebooks/03_model_application.ipynb --output-dir outputs/notebooks
 ```
 
 ## 구조
@@ -59,8 +60,9 @@ src/seq.py             LSTM용 데이터 처리와 모델 학습
 src/viz.py             노트북 공용 그림 설정(한글 폰트 자동 탐색, 히트맵)
 
 notebooks/
-  01_data_diagnosis.ipynb    평가항목 1: 정제 근거, 변수 의미 검증, 복제일, 전력 패턴
-  02_results_analysis.ipynb  평가항목 2·3·4: 모델 비교, 오류분석, 피크 위험 캘린더
+  01_data_diagnosis.ipynb    정제 근거, 변수 의미 검증, 복제일, 전력 패턴
+  02_results_analysis.ipynb  모델 비교, 오류분석, 피크 위험 캘린더
+  03_model_applicatoin.ipynb 전력량 예측 모델 활용 방안
 
 baseline_LSTM.py       Baseline LSTM 모델 구현
 baseline_preprocessing.ipynb
