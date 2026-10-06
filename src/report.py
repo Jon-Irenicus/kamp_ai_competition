@@ -34,7 +34,7 @@ def save_json(obj, path: Path):
 def cv_summary(cv: pd.DataFrame) -> pd.DataFrame:
     from .experiment import wavg
     return pd.DataFrame([
-        {"model": m, "kind": g["kind"].iloc[0], "lookback": g["lookback"].iloc[0],
+        {"model": m, "lookback": g["lookback"].iloc[0],
          **{c: wavg(g, c) for c in METRIC_COLS}, "mae_std_across_folds": g["mae"].std()}
         for m, g in cv.groupby("model")
     ]).sort_values("mae")
