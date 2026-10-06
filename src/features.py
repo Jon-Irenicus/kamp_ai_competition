@@ -22,8 +22,6 @@ LAG_1D_COLS = ["lag_1d", "prev_day_mean", "prev_day_max", "prev_day_last"]
 LAG_7D_COLS = ["lag_7d", "lastweek_day_mean"]
 LAG_COLS = LAG_1D_COLS + LAG_7D_COLS
 WEATHER_COLS = ["temp", "humidity", "wind", "rain", "cdd", "hdd"]
-PROD_COLS = ["prod_h", "prod_prev_h", "prod_next_h", "prod_day_total"]
-PAST_PROD_COLS = ["prod_lag_1d", "prev_day_prod_total"]
 
 # 신경망 입력용 달력 인코딩
 SLOT_CYCLIC_COLS = ["slot_sin", "slot_cos"]

@@ -7,6 +7,8 @@
                 실제값 동률을 고려해 K번째로 큰 실제값 이상인 구간을 모두 실제 피크로 본다.
   - top{K}_mae: 실제 상위 K개 값과 예측 상위 K개 값을 각각 내림차순 정렬해 순위끼리 비교한 MAE.
                 발생 시각과 무관하게 피크 수준의 정확도를 본다(시각은 top{K}_hit이 평가).
+  - topk_hits_within: top{K}_hit의 시각 허용 변형. 예측 상위 K개 구간이 같은 날 실제 피크 구간과
+                ±tol구간 이내이면 적중으로 본다(실제 피크 하나에 여러 예측 구간이 대응될 수 있다).
 """
 from __future__ import annotations
 
@@ -44,6 +46,18 @@ def topk_scores(actual: np.ndarray, pred: np.ndarray, k: int = K) -> tuple[np.nd
     pred_sorted = -np.sort(-pred, axis=1)
     mae = np.abs(actual_sorted[:, :k] - pred_sorted[:, :k]).mean(axis=1)
     return hits, mae
+
+
+def topk_hits_within(actual: np.ndarray, pred: np.ndarray, k: int = K, tol: int = 0) -> np.ndarray:
+    """일자별 예측 상위 k개 구간 중 실제 피크 구간과 ±tol구간 이내인 구간 수. 입력 shape: (일자, 96).
+    tol=0이면 topk_scores의 적중 수와 같다. 허용 범위는 날짜를 넘지 않는다."""
+    pred_top = np.argsort(-pred, axis=1, kind="stable")[:, :k]
+    kth = -np.sort(-actual, axis=1)[:, k - 1]
+    peak = actual >= kth[:, None]
+    if tol > 0:
+        pad = np.pad(peak, ((0, 0), (tol, tol)))
+        peak = np.stack([pad[:, s:s + actual.shape[1]] for s in range(2 * tol + 1)]).any(axis=0)
+    return np.take_along_axis(peak, pred_top, axis=1).sum(axis=1)
 
 
 def daily_peak(d: pd.DataFrame) -> dict:
