@@ -9,9 +9,9 @@ import pandas as pd
 from matplotlib.figure import Figure   # pyplot 미사용: 전역 백엔드를 변경하지 않음
 
 from . import config as C
-from .metrics import HIT_COL, K, TOPK_MAE_COL, daily_matrix
+from .metrics import HIT_COL, K, TOL_HIT_COL, TOPK_MAE_COL, daily_matrix
 
-METRIC_COLS = ["mae", "rmse", "daily_max_mae", HIT_COL, TOPK_MAE_COL]
+METRIC_COLS = ["mae", "rmse", "daily_max_mae", HIT_COL, TOL_HIT_COL, TOPK_MAE_COL]
 FAMILY = {"naive_yesterday": "naive", "naive_lastweek": "naive", "gbm_1d": "gbm", "gbm": "gbm",
           "lstm_1d": "lstm", "lstm_7d": "lstm"}
 
@@ -35,7 +35,7 @@ def cv_summary(cv: pd.DataFrame) -> pd.DataFrame:
     from .experiment import wavg
     return pd.DataFrame([
         {"model": m, "lookback": g["lookback"].iloc[0],
-         **{c: wavg(g, c) for c in METRIC_COLS}, "mae_std_across_folds": g["mae"].std()}
+         **{c: wavg(g, c) for c in METRIC_COLS if c in g}, "mae_std_across_folds": g["mae"].std()}
         for m, g in cv.groupby("model")
     ]).sort_values("mae")
 

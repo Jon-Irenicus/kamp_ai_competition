@@ -19,6 +19,7 @@ from . import config as C
 
 K = C.PEAK_TOP_K
 HIT_COL, TOPK_MAE_COL = f"top{K}_hit", f"top{K}_mae"
+TOL_HIT_COL = f"top{K}_hit_within_{15 * C.PEAK_HIT_TOL_SLOTS}min"   # 피크 시각 ±허용 오차 적중률
 
 
 def regression(y, p) -> dict:
@@ -65,8 +66,10 @@ def daily_peak(d: pd.DataFrame) -> dict:
     p = daily_matrix(d, "pred").to_numpy()
     diff = p.max(axis=1) - a.max(axis=1)
     hits, tmae = topk_scores(a, p)
+    hits_tol = topk_hits_within(a, p, tol=C.PEAK_HIT_TOL_SLOTS)
     return {"daily_max_mae": float(np.abs(diff).mean()),
-            HIT_COL: float((hits / K).mean()), TOPK_MAE_COL: float(tmae.mean())}
+            HIT_COL: float((hits / K).mean()), TOL_HIT_COL: float((hits_tol / K).mean()),
+            TOPK_MAE_COL: float(tmae.mean())}
 
 
 def evaluate(te: pd.DataFrame, pred) -> dict:
