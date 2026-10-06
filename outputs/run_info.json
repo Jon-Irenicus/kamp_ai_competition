@@ -9,7 +9,7 @@
   "seed": 42,
   "data": "dataset/okm_augumented_2021.csv",
   "selected_model": "lstm_1d",
-  "runtime_sec": 1279.4,
+  "runtime_sec": 1544.8,
   "config": {
     "COPY_POLICY": "keep",
     "COST_ONLY_COLS": [
@@ -105,7 +105,7 @@
     "RUN_LSTM": true,
     "SEED": 42,
     "TEST_START": "2021-08-23",
-    "USE_MONTH": true,
+    "USE_MONTH": false,
     "USE_PLANNED_SHUTDOWN": false,
     "USE_WEATHER": false,
     "WEATHER_COLS": [
