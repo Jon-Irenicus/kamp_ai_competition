@@ -75,3 +75,14 @@ def evaluate(te: pd.DataFrame, pred) -> dict:
     out = regression(d["kw"], d["pred"])
     out.update(daily_peak(d))
     return out
+
+
+def selection_score(table: pd.DataFrame, lower: list[str], higher: list[str]) -> pd.DataFrame:
+    """모델별 종합 점수. table: 모델 × 지표.
+    지표별로 모델 간 표준화(z)한 뒤, 오차 지표(lower) 평균의 음수와 적중 지표(higher) 평균을 구하고
+    두 값의 평균을 점수로 한다. 점수가 높을수록 좋다."""
+    t = table[lower + higher].astype(float)
+    z = (t - t.mean()) / t.std()
+    out = pd.DataFrame({"error_z": -z[lower].mean(axis=1), "hit_z": z[higher].mean(axis=1)})
+    out["score"] = out.mean(axis=1)
+    return out

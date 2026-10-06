@@ -7,7 +7,8 @@ from sklearn.model_selection import GroupShuffleSplit, train_test_split
 
 from . import config as C
 from .features import feature_columns
-from .metrics import HIT_COL, K, TOPK_MAE_COL, daily_matrix, evaluate, regression, topk_scores
+from .metrics import (HIT_COL, K, TOPK_MAE_COL, daily_matrix, evaluate, regression, topk_hits_within,
+                      topk_scores)
 from .models import make_gbm, make_models
 
 
@@ -157,9 +158,12 @@ def error_slices(preds: pd.DataFrame, model: str) -> dict[str, pd.DataFrame]:
     a = daily_matrix(d, "kw")
     p = daily_matrix(d, model)
     hits, tmae = topk_scores(a.to_numpy(), p.to_numpy())
+    tol = C.PEAK_HIT_TOL_SLOTS
+    tol_col = f"top{K}_hits_within_{15 * tol}min"
+    hits_tol = topk_hits_within(a.to_numpy(), p.to_numpy(), tol=tol)
     by_day = pd.DataFrame({"date": a.index, "dow": d.groupby("date")["dow"].first().reindex(a.index).to_numpy(),
                            "mae": d.groupby("date")["err"].apply(lambda e: e.abs().mean()).reindex(a.index).to_numpy(),
-                           f"top{K}_hits": hits, TOPK_MAE_COL: tmae,
+                           f"top{K}_hits": hits, tol_col: hits_tol, TOPK_MAE_COL: tmae,
                            "daily_max_err": p.max(axis=1).to_numpy() - a.max(axis=1).to_numpy()})
 
     def agg(key):
@@ -167,5 +171,6 @@ def error_slices(preds: pd.DataFrame, model: str) -> dict[str, pd.DataFrame]:
         return pd.DataFrame({"mae": g["err"].apply(lambda e: e.abs().mean()),
                              "n": g.size()}).reset_index()
 
-    by_dow = agg("dow").merge(by_day.groupby("dow")[[f"top{K}_hits", TOPK_MAE_COL]].mean().reset_index(), on="dow")
+    by_dow = agg("dow").merge(by_day.groupby("dow")[[f"top{K}_hits", tol_col, TOPK_MAE_COL]].mean().reset_index(),
+                              on="dow")
     return {"by_hour": agg("hour"), "by_dow": by_dow, "by_day": by_day}
