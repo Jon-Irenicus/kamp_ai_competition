@@ -81,12 +81,11 @@ def main():
         demo = run_leakage_demo(feat, cols)
         demo.to_csv(args.out / "leakage_demo.csv", index=False)
 
-    step("6/6 오류 슬라이스·그림·요약")
+    step("6/6 오류 슬라이스·그림")
     slices = error_slices(preds, selected)
     for k, v in slices.items():
         v.to_csv(args.out / f"errors_{k}.csv", index=False)
     report.make_figures(args.out, preds, selected, slices)
-    report.write_results_md(args.out, dq, groups, cv, test, selected, demo, slices, gbm_backend())
 
     run_info = {
         "python": platform.python_version(), "numpy": np.__version__, "pandas": pd.__version__,
@@ -96,7 +95,7 @@ def main():
         "config": {k: getattr(C, k) for k in dir(C) if k.isupper()},
     }
     report.save_json(run_info, args.out / "run_info.json")
-    step(f"완료: {args.out}/results.md")
+    step(f"완료: {args.out}")
 
 
 if __name__ == "__main__":

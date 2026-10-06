@@ -54,7 +54,7 @@ src/lstm_model.py      LSTM 모델 정의
 src/models.py          나이브, 랜덤포레스트, GBM
 src/metrics.py         회귀 지표, 일 최대수요 지표, 피크 이벤트
 src/experiment.py      walk-forward CV, 최종 테스트, ablation, 누수 시연, 오류 슬라이스
-src/report.py          results.md, CSV, 그림
+src/report.py          JSON 저장, 요약표, 그림
 src/seq.py             LSTM용 데이터 처리와 모델 학습
 src/viz.py             노트북 공용 그림 설정(한글 폰트 자동 탐색, 히트맵)
 
@@ -100,7 +100,6 @@ python tune.py --trials 2 --seed-check 0 --max-trees 300   # 동작 확인용
 
 | 파일 | 내용 |
 |---|---|
-| `results.md` | 데이터 진단, CV, 테스트, 입력 범위 비교, ablation, 분할 비교, 오류 슬라이스 |
 | `data_quality.json`, `duplicate_groups.csv`, `clean_hourly.csv` | 정제 결과 |
 | `metrics_cv.csv`, `metrics_test.csv`, `predictions_test.csv` | 지표, 예측값 |
 | `ablation_cv.csv`, `leakage_demo.csv` | 설정 비교, 무작위 분할 단위별 MAE |

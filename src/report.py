@@ -1,4 +1,4 @@
-"""결과 저장: CSV, results.md, 그림."""
+"""결과 저장: JSON, 요약표, 그림."""
 from __future__ import annotations
 
 import json
@@ -8,23 +8,11 @@ import numpy as np
 import pandas as pd
 from matplotlib.figure import Figure   # pyplot 미사용: 전역 백엔드를 변경하지 않음
 
-from . import config as C
 from .metrics import HIT_COL, K, TOL_HIT_COL, TOPK_MAE_COL, daily_matrix
 
 METRIC_COLS = ["mae", "rmse", "daily_max_mae", HIT_COL, TOL_HIT_COL, TOPK_MAE_COL]
 FAMILY = {"naive_yesterday": "naive", "naive_lastweek": "naive", "gbm_1d": "gbm", "gbm": "gbm",
           "lstm_1d": "lstm", "lstm_7d": "lstm"}
-
-
-def md_table(df: pd.DataFrame, digits: int = 3) -> str:
-    def fmt(v):
-        if isinstance(v, float):
-            return "-" if pd.isna(v) else f"{v:.{digits}f}"
-        return str(v)
-    head = "| " + " | ".join(map(str, df.columns)) + " |"
-    sep = "|" + "---|" * len(df.columns)
-    body = ["| " + " | ".join(fmt(v) for v in row) + " |" for row in df.itertuples(index=False)]
-    return "\n".join([head, sep, *body])
 
 
 def save_json(obj, path: Path):
@@ -51,51 +39,6 @@ def lookback_table(cv_mean: pd.DataFrame, test: pd.DataFrame) -> pd.DataFrame:
         rows.append({"family": fam, "lookback": t["lookback"], "model": m, "cv_mae": c["mae"],
                      f"cv_{HIT_COL}": c[HIT_COL], "test_mae": t["mae"], f"test_{HIT_COL}": t[HIT_COL]})
     return pd.DataFrame(rows).sort_values(["family", "lookback"])
-
-
-def write_results_md(out: Path, dq: dict, groups: pd.DataFrame, cv: pd.DataFrame, test: pd.DataFrame,
-                     selected: str, demo: pd.DataFrame | None,
-                     slices: dict, backend: str):
-    cv_mean = cv_summary(cv)
-    dup = dq["duplicate_days"]
-    L = [
-        "# 실험 결과 요약", "",
-        f"- GBM 백엔드: {backend}",
-        f"- 과제: D일 00:00에 D일 15분 수요전력 96개 예측.  기상 {C.USE_WEATHER}, "
-        f"계획휴무 {C.USE_PLANNED_SHUTDOWN}, 월 피처 {C.USE_MONTH}",
-        f"- 최종 테스트: {C.TEST_START} ~ (선정에 미사용)",
-        f"- 피크 지표: 일자별 상위 {K}개 15분 구간. {HIT_COL} = 예측 상위 {K}개 중 실제 상위 {K}개 포함 비율, "
-        f"{TOPK_MAE_COL} = 정렬된 상위 {K}개 값의 MAE", "",
-        "## 1. 데이터 품질 진단", "",
-        f"- 기간 {dq['period'][0]} ~ {dq['period'][1]}, {dq['n_days']}일",
-        f"- '시간' 컬럼 오류 복원: {dq['hour_repaired']['rows']}행 ({', '.join(dq['hour_repaired']['dates'])}), "
-        f"복원 후 결측 시각 {dq['missing_hours_after_repair']}, 중복 시각 {dq['duplicate_ts_after_repair']}",
-        f"- 인건비 규칙(09~17시 1.0, 그 외 1.5) 성립: {dq['labor_rule_holds_on_unrepaired_rows']}, "
-        f"재계산 {dq['labor_mult_recomputed_rows']}행",
-        f"- 평균 컬럼과 네 구간 평균의 최대 차이: {dq['avg_col_vs_mean_of_4_max_abs_diff']} (반올림)",
-        f"- 공장인원 = 생산량/(15분+30분+45분+60분), 최대 오차 "
-        f"{dq['leakage_factory_staff']['max_abs_diff_vs_prod_over_power_sum']:.1e} → 제외",
-        f"- 전기요금(월별 상수): {dq['tariff_by_month']}",
-        f"- 기상 결측(보간 전): {dq['weather_missing_before']}",
-        f"- 전력 0 구간: {dq['zero_power_15min_slots']['n']}개 ({', '.join(dq['zero_power_15min_slots']['dates'])})",
-        f"- 복제일: {dup['n_days']}일 중 {dup['n_days_in_duplicate_groups']}일이 복제그룹 소속, "
-        f"고유 프로파일 {dup['n_unique_profiles']}개, 월별 {dup['days_in_duplicate_groups_by_month']}",
-        "", md_table(groups.head(8)), "",
-        "## 2. 교차검증 (주 단위 walk-forward, 채점일 가중 평균)", "",
-        md_table(cv.groupby("fold")[["n_train_days", "n_purged_days", "n_scored_days"]].first().reset_index()), "",
-        md_table(cv_mean[["model", "lookback", *METRIC_COLS, "mae_std_across_folds"]]), "",
-        "폴드별 MAE", "", md_table(cv.pivot(index="model", columns="fold", values="mae").reset_index()), "",
-        f"## 3. 최종 테스트 ({C.TEST_START} ~)", "",
-        md_table(test[["model", "kind", "lookback", *METRIC_COLS]]), "",
-        "## 3-1. 입력 범위 비교 (1d / 7d)", "",
-        md_table(lookback_table(cv_mean, test)), "",
-    ]
-    if demo is not None:
-        L += ["## 4. 무작위 분할 단위별 MAE (GBM)", "", md_table(demo), ""]
-    L += [f"## 5. 오류 슬라이스 ({selected}, 최종 테스트)", ""]
-    for k, v in slices.items():
-        L += [f"### {k}", "", md_table(v), ""]
-    (out / "results.md").write_text("\n".join(L), encoding="utf-8")
 
 
 def make_figures(out: Path, preds: pd.DataFrame, selected: str, slices: dict):
