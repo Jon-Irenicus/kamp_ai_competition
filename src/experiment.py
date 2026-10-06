@@ -1,4 +1,4 @@
-"""교차검증(주 단위 walk-forward), 최종 테스트, ablation, 분할 방식 비교, 오류 슬라이스."""
+"""교차검증(주 단위 walk-forward), 최종 테스트, 분할 방식 비교, 오류 슬라이스."""
 from __future__ import annotations
 
 import numpy as np
@@ -105,34 +105,6 @@ def run_test(feat: pd.DataFrame):
     return pd.DataFrame(rows), preds, fitted
 
 
-def run_ablations(feat: pd.DataFrame) -> pd.DataFrame:
-    """GBM 기준으로 설정을 하나씩 바꿨을 때의 CV 성능."""
-    variants = [
-        ("baseline (config)", C.COPY_POLICY, C.USE_WEATHER, past),
-        ("copy days dropped", "drop", C.USE_WEATHER, past),
-        ("copy days weighted 1/n", "weight", C.USE_WEATHER, past),
-        ("weather: on", C.COPY_POLICY, True, past),
-        ("weather: off", C.COPY_POLICY, False, past),
-    ]
-    folds = list(cv_folds(feat))
-    rows, seen = [], set()
-    for name, policy, weather in variants:
-        if (policy, weather) in seen:
-            continue
-        seen.add((policy, weather))
-        cols = feature_columns(weather)
-        fr = []
-        for _, tr, val, score, _ in folds:
-            p, _ = fit_predict(make_gbm(), tr, val, cols, policy)
-            r = evaluate(val[score], p[score])
-            r["n_scored_days"] = int(val.loc[score, "date"].nunique())
-            fr.append(r)
-        fr = pd.DataFrame(fr)
-        rows.append({"variant": name, **{c: wavg(fr, c) for c in
-                     ["mae", "nmae", "daily_max_mae", HIT_COL, TOPK_MAE_COL]}})
-    return pd.DataFrame(rows)
-
-
 def run_leakage_demo(feat: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
     """동일 GBM을 무작위 분할 단위(행·일·복제그룹)만 바꿔 평가한다."""
     d = feat.reset_index(drop=True)
@@ -146,7 +118,7 @@ def run_leakage_demo(feat: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
     for label, (a, b) in splits.items():
         m = make_gbm().fit(d.loc[a, cols], d.loc[a, "kw"])
         r = regression(d.loc[b, "kw"], m.predict(d.loc[b, cols]))
-        rows.append({"split": label, "mae": r["mae"], "nmae": r["nmae"], "n_test_rows": len(b)})
+        rows.append({"split": label, "mae": r["mae"], "n_test_rows": len(b)})
     return pd.DataFrame(rows)
 
 

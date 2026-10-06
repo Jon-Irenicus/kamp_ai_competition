@@ -22,7 +22,7 @@ import numpy as np
 import pandas as pd
 
 from . import config as C
-from .features import SLOTS_PER_DAY, nn_future_columns, nn_past_columns
+from .features import SLOTS_PER_DAY, nn_future_columns
 
 try:
     import torch
@@ -36,20 +36,25 @@ HORIZON = SLOTS_PER_DAY
 class SequenceForecaster:
     needs_full_frame = True
 
-    def __init__(self, window: int, name: str = "seq", decoder_lags: list[str] | None = None,
-                 use_past_prod: bool | None = None):
+    def __init__(self, window: int, name: str = "seq", decoder_lags: list[str] | None = None):
         self.window = window
         self.name = name
         self.decoder_lags = list(decoder_lags or [])
-        self.use_past_prod = C.USE_PAST_PROD if use_past_prod is None else use_past_prod
 
     # ── 입력 구성 ──────────────────────────────────────────────────────
+    @staticmethod
+    def _config_columns():
+        fut = nn_future_columns()
+        return ["kw"] + fut, fut
+
     def _columns(self):
-        # use_past_prod 도입 이전에 저장된 모델은 과거 생산량 없이 학습되었다.
-        return nn_past_columns(getattr(self, "use_past_prod", False)), nn_future_columns()
+        """학습 후에는 학습 시점의 입력 구성을 사용한다(설정을 바꿔도 저장된 모델을 그대로 사용)."""
+        if hasattr(self, "p_mean_"):
+            return list(self.p_mean_.index), list(self.f_mean_.index)
+        return self._config_columns()
 
     def _fit_scaler(self, feat: pd.DataFrame, fit_index):
-        past_cols, fut_cols = self._columns()
+        past_cols, fut_cols = self._config_columns()
         ref = feat.loc[fit_index]
         std = lambda s: s.std().replace(0, 1.0).fillna(1.0)
         self.p_mean_, self.p_std_ = ref[past_cols].mean(), std(ref[past_cols])

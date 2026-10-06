@@ -54,7 +54,7 @@ def lookback_table(cv_mean: pd.DataFrame, test: pd.DataFrame) -> pd.DataFrame:
 
 
 def write_results_md(out: Path, dq: dict, groups: pd.DataFrame, cv: pd.DataFrame, test: pd.DataFrame,
-                     selected: str, abl: pd.DataFrame | None, demo: pd.DataFrame | None,
+                     selected: str, demo: pd.DataFrame | None,
                      slices: dict, backend: str):
     cv_mean = cv_summary(cv)
     dup = dq["duplicate_days"]
@@ -83,18 +83,16 @@ def write_results_md(out: Path, dq: dict, groups: pd.DataFrame, cv: pd.DataFrame
         "", md_table(groups.head(8)), "",
         "## 2. 교차검증 (주 단위 walk-forward, 채점일 가중 평균)", "",
         md_table(cv.groupby("fold")[["n_train_days", "n_purged_days", "n_scored_days"]].first().reset_index()), "",
-        md_table(cv_mean[["model", "kind", "lookback", *METRIC_COLS, "mae_std_across_folds"]]), "",
+        md_table(cv_mean[["model", "lookback", *METRIC_COLS, "mae_std_across_folds"]]), "",
         "폴드별 MAE", "", md_table(cv.pivot(index="model", columns="fold", values="mae").reset_index()), "",
         f"## 3. 최종 테스트 ({C.TEST_START} ~)", "",
         md_table(test[["model", "kind", "lookback", *METRIC_COLS]]), "",
         "## 3-1. 입력 범위 비교 (1d / 7d)", "",
         md_table(lookback_table(cv_mean, test)), "",
     ]
-    if abl is not None:
-        L += ["## 4. Ablation (GBM, CV)", "", md_table(abl), ""]
     if demo is not None:
-        L += ["## 5. 무작위 분할 단위별 MAE (GBM)", "", md_table(demo), ""]
-    L += [f"## 6. 오류 슬라이스 ({selected}, 최종 테스트)", ""]
+        L += ["## 4. 무작위 분할 단위별 MAE (GBM)", "", md_table(demo), ""]
+    L += [f"## 5. 오류 슬라이스 ({selected}, 최종 테스트)", ""]
     for k, v in slices.items():
         L += [f"### {k}", "", md_table(v), ""]
     (out / "results.md").write_text("\n".join(L), encoding="utf-8")
