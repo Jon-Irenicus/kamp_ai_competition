@@ -63,7 +63,6 @@ def write_results_md(out: Path, dq: dict, groups: pd.DataFrame, cv: pd.DataFrame
         f"- GBM 백엔드: {backend}",
         f"- 과제: D일 00:00에 D일 15분 수요전력 96개 예측.  기상 {C.USE_WEATHER}, "
         f"계획휴무 {C.USE_PLANNED_SHUTDOWN}, 월 피처 {C.USE_MONTH}",
-        f"- 모델 선정: {C.CV_START}부터 {C.CV_FOLD_DAYS}일 단위 walk-forward, 점예측 모델 중 CV MAE 최소 → **{selected}**",
         f"- 최종 테스트: {C.TEST_START} ~ (선정에 미사용)",
         f"- 피크 지표: 일자별 상위 {K}개 15분 구간. {HIT_COL} = 예측 상위 {K}개 중 실제 상위 {K}개 포함 비율, "
         f"{TOPK_MAE_COL} = 정렬된 상위 {K}개 값의 MAE", "",
