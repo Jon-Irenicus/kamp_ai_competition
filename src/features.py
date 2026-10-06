@@ -3,8 +3,7 @@
 모든 피처는 예측 시점(D일 00:00)에 알 수 있는 값만 사용한다.
   - 전력 래그: D-1일 이전 실측(lag_1d: 1일 전 동일 구간, lag_7d: 7일 전 동일 구간)
   - 달력: 사전에 확정
-  - 과거 생산량(prod_lag_1d: 1일 전 동일 시간, prev_day_prod_total: 전일 총생산량): config 설정 시에만 사용
-  - 기상, 생산계획: config 설정 시에만 사용
+  - 기상: config 설정 시에만 사용
 """
 from __future__ import annotations
 
@@ -81,19 +80,6 @@ def build_features(long: pd.DataFrame) -> pd.DataFrame:
     f["cdd"] = (f["temp"] - 24).clip(lower=0)
     f["hdd"] = (10 - f["temp"]).clip(lower=0)
 
-    # 생산계획(시간 단위 값을 15분 구간에 공유)
-    f["ts_hour"] = f["ts"].dt.floor("h")
-    ph = f.groupby("ts_hour")["prod"].first()
-    f["prod_h"] = f["ts_hour"].map(ph)
-    f["prod_prev_h"] = f["ts_hour"].map(ph.shift(1)).fillna(0)
-    f["prod_next_h"] = f["ts_hour"].map(ph.shift(-1)).fillna(0)
-    prod_daily = ph.groupby(ph.index.normalize()).sum()
-    f["prod_day_total"] = f["date"].map(prod_daily)
-
-    # 과거 생산량(D-1일 실적)
-    f["prod_lag_1d"] = f["prod_h"].shift(SLOTS_PER_DAY)
-    f["prev_day_prod_total"] = f["date"].map(prod_daily.asfreq("D").shift(1))
-
     f = f.dropna(subset=LAG_COLS).reset_index(drop=True)   # 첫 7일은 lag_7d가 없어 제외
     na = f[CAL_COLS + SHUTDOWN_COLS + LAG_COLS + WEATHER_COLS
            + SLOT_CYCLIC_COLS + DOW_ONEHOT_COLS + MONTH_CYCLIC_COLS].isna().sum()
@@ -102,7 +88,7 @@ def build_features(long: pd.DataFrame) -> pd.DataFrame:
     return f
 
 
-def _optional_cols(prod_plan: str, use_weather: bool) -> list[str]:
+def _optional_cols(use_weather: bool) -> list[str]:
     cols = []
     if C.USE_PLANNED_SHUTDOWN:
         cols += SHUTDOWN_COLS
@@ -111,28 +97,16 @@ def _optional_cols(prod_plan: str, use_weather: bool) -> list[str]:
     return cols
 
 
-def feature_columns( use_weather: bool = C.USE_WEATHER,
-                    lookback: str = "7d", use_past_prod: bool | None = None) -> list[str]:
+def feature_columns(use_weather: bool = C.USE_WEATHER, lookback: str = "7d") -> list[str]:
     """트리·기준 모델 피처. lookback="1d"는 1일 전 정보만, "7d"는 7일 전 정보까지 사용."""
     if lookback not in ("1d", "7d"):
         raise ValueError(f"lookback은 1d/7d 중 하나: {lookback}")
-    if use_past_prod is None:
-        use_past_prod = C.USE_PAST_PROD
     lags = LAG_1D_COLS + (LAG_7D_COLS if lookback == "7d" else [])
     cal = [c for c in CAL_COLS if C.USE_MONTH or c != "month"]
-    return cal + lags + _optional_cols(prod_plan, use_weather)
+    return cal + lags + _optional_cols(use_weather)
 
 
 def nn_future_columns(use_weather: bool = C.USE_WEATHER) -> list[str]:
     """LSTM 인코더·디코더 공통 입력(달력·상태). 디코더 래그는 seq.py에서 별도로 추가한다."""
     month = MONTH_CYCLIC_COLS if C.USE_MONTH else []
-    return SLOT_CYCLIC_COLS + DOW_ONEHOT_COLS + month + NN_FLAG_COLS + _optional_cols(prod_plan, use_weather)
-
-
-def nn_past_columns(use_past_prod: bool | None = None) -> list[str]:
-    """LSTM 인코더(과거 구간) 입력: 전력 + (과거 생산량) + 공통 달력·상태."""
-    if use_past_prod is None:
-        use_past_prod = C.USE_PAST_PROD
-    fut = nn_future_columns()
-    prod = ["prod_h"] if use_past_prod and "prod_h" not in fut else []
-    return ["kw"] + prod + fut
+    return SLOT_CYCLIC_COLS + DOW_ONEHOT_COLS + month + NN_FLAG_COLS + _optional_cols(use_weather)
