@@ -9,7 +9,7 @@
   "seed": 42,
   "data": "dataset/okm_augumented_2021.csv",
   "selected_model": "lstm_1d",
-  "runtime_sec": 1374.3,
+  "runtime_sec": 1279.4,
   "config": {
     "COPY_POLICY": "keep",
     "COST_ONLY_COLS": [
